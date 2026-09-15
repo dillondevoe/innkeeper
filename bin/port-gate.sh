@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # port-gate.sh — judges a file before it may enter this repo. It never rewrites.
 #
-#   port-gate.sh [--source SRC] DEST...
+#   port-gate.sh --source SRC | --no-source  DEST...
+#   (one of the two is REQUIRED: an omitted source must not silently skip the wall)
 #
 # Verdicts, one line per DEST:
 #   PASS
@@ -33,26 +34,38 @@ BUILTIN=$(printf '%s\t%s\n' \
 # Where a roster name is a hard-coded address rather than an English word (D3).
 ADDR_DIRS='^(bus|lifecycle|bin|staff|roles)/'
 
-usage() { echo "usage: port-gate.sh [--source SRC] DEST..." >&2; exit 2; }
+usage() { echo "usage: port-gate.sh --source SRC | --no-source  DEST..." >&2; exit 2; }
 
-SRC=
-[ "${1:-}" = --source ] && { [ $# -ge 2 ] || usage; SRC=$2; shift 2; }
+SRC= NOSRC=
+case "${1:-}" in
+  --source) [ $# -ge 2 ] || usage; SRC=$2; shift 2 ;;
+  --no-source) NOSRC=1; shift ;;
+  -*|'') usage ;;
+  *) echo "CANNOT-ASSESS - no --source given; pass --source SRC, or --no-source for a file authored in place"; exit 2 ;;
+esac
 [ $# -ge 1 ] || usage
 case "$1" in -*) usage ;; esac
 
 if [ -z "$LIST" ] || [ ! -s "$LIST" ]; then
   echo "CANNOT-ASSESS - forbidden list unset or empty (INNKEEPER_FORBIDDEN)"; exit 2
 fi
-rules=$( { printf '%s\n' "$BUILTIN"; command grep -Ev '^[[:space:]]*(#|$)' "$LIST"; } )
+# CR stripped: a CRLF list would otherwise put \r at the end of every regex and disable every rule.
+rules=$( { printf '%s\n' "$BUILTIN"; tr -d '\r' <"$LIST" | command grep -Ev '^[[:space:]]*(#|$)'; } )
+# Every rule must compile. grep rc=2 on a bad regex is otherwise indistinguishable from "no match".
+while IFS=$'\t' read -r cls re; do
+  command grep -Eq -- "$re" /dev/null 2>/dev/null; [ $? = 2 ] && { echo "CANNOT-ASSESS - invalid regex in class $cls"; exit 2; }
+done <<<"$rules"
 if ! printf '%s\n' "$rules" | command grep -q "^name	"; then
   echo "CANNOT-ASSESS - forbidden list has no \`name\` rules; the address-name check would be vacuous"; exit 2
 fi
 
 # 1. Wall: judged on the source PATH, before anything is opened.
+# Judged on the path as given AND as resolved, so a symlink or relative path cannot launder it.
 if [ -n "$SRC" ]; then
+  srcreal=$(realpath -m -- "$SRC")
   while IFS=$'\t' read -r cls re; do
     [ "$cls" = wall ] || continue
-    if printf '%s' "$SRC" | command grep -Eqi -- "$re"; then
+    if printf '%s\n%s\n' "$SRC" "$srcreal" | command grep -Eqi -- "$re"; then
       echo "REFUSED wall $SRC"; exit 1
     fi
   done <<<"$rules"
@@ -68,6 +81,12 @@ judge() {
   if [ ! -r "$abs" ] || [ -d "$abs" ]; then echo "CANNOT-ASSESS $rel unreadable"; bump 2; return; fi
   if [ ! -s "$abs" ]; then echo "CANNOT-ASSESS $rel zero-line file; an empty scan is not a clean one"; bump 2; return; fi
 
+  # Text only. grep on a binary/NUL/UTF-16 file prints "binary file matches" with no line number,
+  # which read as clean; a gate that cannot read the bytes as text cannot judge them.
+  if ! LC_ALL=C command grep -Eq -- $'^[\t -~\x80-\xff]*$' "$abs" || LC_ALL=C command grep -qaP '\x00' "$abs"; then
+    echo "CANNOT-ASSESS $rel not text"; bump 2; return
+  fi
+
   # 2. Token classes over the file's bytes.
   while IFS=$'\t' read -r cls re; do
     [ -n "$cls" ] || continue
@@ -77,8 +96,10 @@ judge() {
       cls=address-name
     fi
     local ln
-    ln=$(command grep -Ein -m1 -- "$re" "$abs" | cut -d: -f1)
-    if [ -n "$ln" ]; then echo "FORBIDDEN $cls $rel:$ln"; hit=1; fi
+    local out grc
+    out=$(LC_ALL=C command grep -aEin -m1 -- "$re" "$abs"); grc=$?
+    if [ $grc = 0 ]; then echo "FORBIDDEN $cls $rel:${out%%:*}"; hit=1
+    elif [ $grc != 1 ]; then echo "CANNOT-ASSESS $rel grep rc=$grc on class $cls"; bump 2; return; fi
   done <<<"$rules"
   [ $hit = 1 ] && { bump 1; return; }
 
@@ -98,9 +119,12 @@ judge() {
   rm -f "$rep"
 
   # 4. Executable code must carry a green selftest.
+  # Keyed on the repo-relative path (lifecycle/deploy.py -> tests/lifecycle-deploy-selftest.*), so
+  # a same-basename test for another file cannot satisfy it. roles/ is prose run by an LLM, not code:
+  # it is token-gated above and exempt here by design.
   if [[ "$rel" =~ ^(bus|lifecycle|bin|staff)/ ]]; then
-    local base t; base=$(basename "$rel"); base=${base%.*}
-    t=$(ls "$REPO"/tests/"$base"-selftest.* 2>/dev/null | head -1)
+    local key t; key=${rel%.*}; key=${key//\//-}
+    t=$(ls "$REPO"/tests/"$key"-selftest.* 2>/dev/null | head -1)
     if [ -z "$t" ]; then echo "NO-SELFTEST $rel"; bump 1; return; fi
     if ! INNKEEPER_GATE_NESTED=1 bash "$t" >/dev/null 2>&1; then echo "SELFTEST-RED $rel"; bump 1; return; fi
   fi
