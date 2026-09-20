@@ -83,7 +83,12 @@ if [ -z "${LEASE_NESTED:-}" ]; then
   mut() { # name, sed-program -> name=PASS when the mutant is CAUGHT (battery red)
     local f; f=$(mktemp "$R/lifecycle/.mut-XXXXXX.sh")
     cp "$R/lifecycle/lease.sh" "$f"
-    sed -i "$2" "$f"
+    # GNU `sed -i PROG f` and BSD `sed -i SUFFIX PROG f` are DIFFERENT COMMANDS sharing a
+  # spelling. On macOS the program is eaten as a backup suffix, the edit never lands, and
+  # the mutant comes out byte-identical to the original. The mut() harness caught that
+  # honestly -- MUTATION-DID-NOT-APPLY, not a false PASS -- which is why it is worth
+  # keeping that third state. Write through a temp file instead; POSIX sed has no -i.
+  sed "$2" "$f" >"$f.ed" && mv -f "$f.ed" "$f"
     if cmp -s "$f" "$R/lifecycle/lease.sh"; then echo "$1=MUTATION-DID-NOT-APPLY"; rm -f "$f"; return; fi
     if LEASE_NESTED=1 LEASE_IMPL=$f bash "$0" >/dev/null 2>&1; then echo "$1=FAILED-TO-CATCH"; else echo "$1=PASS"; fi
     rm -f "$f"

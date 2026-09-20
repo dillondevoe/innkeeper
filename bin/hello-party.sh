@@ -56,7 +56,18 @@ echo "   first-light: state=$(bash "$REPO/bus/quest.sh" field first-light state)
 
 say "3. Four brains boot and each writes ONE line to the bus (reverse roster order)"
 today=$(date -u +%Y-%m-%d)
-REVERSED=$(printf '%s\n' $LANES | tac)
+# `tac` is GNU coreutils and is ABSENT on macOS, where the demo may well be driven from.
+# It failed there loudly (`tac: command not found`) and the demo carried on regardless --
+# see the step guard below. awk is POSIX and on every box that has a shell.
+REVERSED=$(printf '%s\n' $LANES | awk '{a[NR]=$0} END{for(i=NR;i>0;i--) print a[i]}') \
+  || { echo "FATAL: could not reverse the roster" >&2; exit 2; }
+# The rule four lines above -- THE RC IS CONSUMED AT THE ASSIGNMENT -- was stated here and
+# not applied here. When `tac` was missing on macOS, this assignment failed, REVERSED came
+# out empty, the `for` loop over it ran ZERO times, and the demo carried on to print
+# `enqueue: 0 marker(s) queued` and four empty delivery tiers with `(control:ok)`. A
+# stranger reading that output sees a quiet party, not a broken one: the failure rendered
+# as a legitimate-looking empty result, which is the only shape worth fearing on a stage.
+[ -n "$REVERSED" ] || { echo "FATAL: the reversed roster is empty" >&2; exit 2; }
 FIRST=$(printf '%s\n' $LANES | sed -n 1p)
 SECOND=$(printf '%s\n' $LANES | sed -n 2p)
 [ -n "$SECOND" ] || { echo "FATAL: a party of one cannot pass a message" >&2; exit 1; }

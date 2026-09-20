@@ -61,8 +61,23 @@ B=$(printf '%s\n' $LANES | sed -n 2p)
 # A worker: claims the lane, begins an attempt, writes its result INTO THE ATTEMPT DIR, and only
 # then commits. `--die-before` and `--die-after` make it exit in the two places a crash can land.
 # It is a real process and it is really killed; the exit is the child's, not a message.
+# $BASHPID ARRIVED IN BASH 4.0 AND macOS SHIPS 3.2. There it is simply unset, so `kill -9
+# $BASHPID` expanded to `kill -9`, which fails with a usage error and returns 1. The worker
+# then RETURNED instead of dying -- the exact thing the comment below says must never happen,
+# and the demo's whole claim is that the kill is real. The check caught it (`got [1] want
+# [137]`) because it asserts the SIGNAL, not merely that something went wrong.
+#
+# AND THE FIRST FIX WAS THE SAME BUG AGAIN. I wrote a `self_pid` helper and called it as
+# `me=$(self_pid)` -- but command substitution forks, so both branches reported the pid of
+# THAT subshell, not the worker's. The kill landed on an already-exiting process, the worker
+# ran to completion, and five checks went red on the machine where it used to pass. A
+# construct that looks like it is talking about "me" and is not: third instance in this file.
+# So the value is taken INLINE, in the worker's own shell. `exec sh -c 'echo $PPID'` is the
+# portable escape: the fork is unavoidable, but `exec` replaces it with sh, whose parent is
+# then the worker itself rather than an extra layer.
+
 worker() { # $1=lane $2=quest $3=text $4=before|after|clean
-  local lane=$1 q=$2 text=$3 when=$4 att nonce
+  local lane=$1 q=$2 text=$3 when=$4 att nonce me
   nonce=$(PARTY_BRAIN=$lane bash "$LEASE" claim); nonce=${nonce#CLAIMED }
   att=$(bash "$MERGE" begin "$q" "$lane") || return 9
   att=${att#ATTEMPT }
@@ -72,9 +87,9 @@ worker() { # $1=lane $2=quest $3=text $4=before|after|clean
   # script did, exiting 137 four lines into act 1. Same family as the refusals in bus/quest.sh
   # that exited only their own subshell: a construct that looks like it is talking about "me"
   # and is not.
-  [ "$when" = before ] && { kill -9 $BASHPID; sleep 5; }
+  [ "$when" = before ] && { if [ -n "${BASHPID:-}" ]; then me=$BASHPID; else me=$(exec sh -c 'echo $PPID'); fi; kill -9 "$me"; sleep 5; }
   bash "$MERGE" commit "$q" "$lane" "$att/result.part" || return 8
-  [ "$when" = after ] && { kill -9 $BASHPID; sleep 5; }
+  [ "$when" = after ] && { if [ -n "${BASHPID:-}" ]; then me=$BASHPID; else me=$(exec sh -c 'echo $PPID'); fi; kill -9 "$me"; sleep 5; }
   PARTY_BRAIN=$lane bash "$LEASE" release "$nonce" >/dev/null
   bash "$QUEST" state "$q" done >/dev/null
 }

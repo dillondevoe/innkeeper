@@ -30,7 +30,13 @@ The port gate's battery needs [gitleaks](https://github.com/gitleaks/gitleaks) o
 rather than a verdict, because every one of its arms asserts a real scan result. **A CANNOT-RUN
 fails the suite** (`run-all.sh` exits non-zero), the same as a RED: a battery that could not run
 is not a battery that passed, and the fresh-clone default on a machine without gitleaks is
-therefore 14/15 and rc=1 until you install it.
+therefore 15/16 and rc=1 until you install it.
+
+One battery is not a battery at all: `tests/portability-selftest.sh` greps the shell sources
+for GNU-only constructs (`tac`, `sed -i`, `$BASHPID`, BRE `\|`, `grep -P`, `readlink -f`,
+`date -d`). It exists because this repo was 15/15 green on Linux and 9/15 with a visibly
+broken demo on macOS on the same commit — the batteries catch these faithfully, but only on
+a machine that has the BSD tools, which the author's machine is not.
 
 ## Then kill a worker
 

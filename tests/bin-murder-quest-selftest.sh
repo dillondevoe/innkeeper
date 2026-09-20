@@ -58,7 +58,12 @@ mut(){ # name, sed-program
   # control. (Caught by review, 2026-09-20, before this ever shipped.)
   local f; f=$(mktemp "$R/bus/.mut-XXXXXX.sh")
   cp "$R/bus/merge.sh" "$f"
-  sed -i "$2" "$f"
+  # GNU `sed -i PROG f` and BSD `sed -i SUFFIX PROG f` are DIFFERENT COMMANDS sharing a
+  # spelling. On macOS the program is eaten as a backup suffix, the edit never lands, and
+  # the mutant comes out byte-identical to the original. The mut() harness caught that
+  # honestly -- MUTATION-DID-NOT-APPLY, not a false PASS -- which is why it is worth
+  # keeping that third state. Write through a temp file instead; POSIX sed has no -i.
+  sed "$2" "$f" >"$f.ed" && mv -f "$f.ed" "$f"
   if cmp -s "$f" "$R/bus/merge.sh"; then echo "$1=MUTATION-DID-NOT-APPLY"; rm -f "$f"; return; fi
   if INNKEEPER_MERGE=$f bash "$IMPL" >/dev/null 2>&1; then echo "$1=FAILED-TO-CATCH"; else echo "$1=PASS"; fi
   rm -f "$f"

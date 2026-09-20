@@ -69,9 +69,16 @@ awake_seconds() {
 AWAKE=$(awake_seconds)
 
 new_nonce() {
-  uuidgen 2>/dev/null && return
-  cat /proc/sys/kernel/random/uuid 2>/dev/null && return
-  od -An -N16 -tx1 /dev/urandom | tr -d ' \n'; echo
+  # SCHEMA.md specifies the nonce as lowercase hex, and two of these three sources emit it
+  # that way -- but macOS `uuidgen` returns UPPERCASE. A reader matching the documented
+  # shape then rejects a nonce this very function produced, on one platform only. Normalise
+  # at the single producer rather than widening every consumer's pattern.
+  local n
+  n=$(uuidgen 2>/dev/null) \
+    || n=$(cat /proc/sys/kernel/random/uuid 2>/dev/null) \
+    || n=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
+  [ -n "$n" ] || { echo "lease.sh: no entropy source produced a nonce" >&2; return 1; }
+  printf '%s\n' "$n" | tr 'A-F' 'a-f'
 }
 
 # Mutex. A holder that died inside the critical section leaves the dir; it is broken after 10s,

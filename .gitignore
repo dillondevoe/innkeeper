@@ -8,3 +8,4 @@ state/
 # battery must not be able to leave one behind as a committable file.
 bus/.mut-*
 lifecycle/.mut-*
+bus/.plant-probe.sh

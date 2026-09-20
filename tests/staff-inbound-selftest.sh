@@ -34,7 +34,9 @@ addressees: [teague]
 aliases:
   - { from: cleric, to: rabbot }
 YAML
-sed -i "s|BUSDIR|$W|" "$W/party.yaml"
+# sed -i is not portable (see mut() in the merge battery): BSD reads the next word as a
+# backup suffix, so this substitution silently never happened on macOS.
+sed "s|BUSDIR|$W|" "$W/party.yaml" >"$W/party.yaml.ed" && mv -f "$W/party.yaml.ed" "$W/party.yaml"
 
 C="$W/comms"
 mk() { # mk <basename> <to-line> [cc-line]
@@ -69,7 +71,9 @@ out=$(run)
 # "routable", which is a substring of UNROUTABLE in the tier-2 heading and of "unroutable:"
 # in the summary — it counted 5 for three files. A grep for a literal also matches the tool's
 # own prose ABOUT that literal, and headings are where such prose lives.
-c1=$(grep -E '^  [a-z]' <<< "$out" | grep -c 'P2-routable\|body-addressed\|cc-me')
+# -E with bare `|`, not BRE `\|`: the escaped form is a GNU extension that BSD grep reads as
+# a LITERAL bar, so on macOS this counted zero and the arm passed for the wrong reason.
+c1=$(grep -E '^  [a-z]' <<< "$out" | grep -Ec 'P2-routable|body-addressed|cc-me')
 [ "$c1" = 3 ] && ok "A5 each comm appears exactly ONCE across all tiers" || bad "A5 comms appear $c1 times, expected 3"
 
 # ---- B. the execute/notify width split — the whole thesis ------------------------------

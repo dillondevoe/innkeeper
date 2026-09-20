@@ -39,7 +39,12 @@ src_b=$T/work/b.out; printf 'result from the SECOND worker\n' > "$src_b"
 arm M1-unmerged-initially "$(M status q-one)" '^UNMERGED$'
 
 att=$(M begin q-one "$LANE_A")
-arm M2-begin-makes-a-dir "$(case "$att" in "ATTEMPT "*) [ -d "${att#ATTEMPT }" ] && echo OK;; esac)" '^OK$'
+# NOT a `case` inside `$( )`: bash 3.2 (macOS's /bin/bash) miscounts the parentheses of a case
+# pattern inside command substitution, and this arm's "got" came back as a fragment of its own
+# source text -- a parse accident that is indistinguishable from a real failure in the report.
+m2=FAIL
+case "$att" in "ATTEMPT "*) [ -d "${att#ATTEMPT }" ] && m2=OK ;; esac
+arm M2-begin-makes-a-dir "$m2" '^OK$'
 
 arm M3-first-commit "$(M commit q-one "$LANE_A" "$src_a")" '^MERGED '
 dest=$(M dest q-one)
@@ -129,7 +134,12 @@ if [ -z "${MERGE_NESTED:-}" ]; then
     # travel the mutant's path is not a control. (Review catch, 2026-09-20, before shipping.)
     local f; f=$(mktemp "$R/bus/.mut-XXXXXX.sh")
     cp "$R/bus/merge.sh" "$f"
-    sed -i "$2" "$f"
+    # GNU `sed -i PROG f` and BSD `sed -i SUFFIX PROG f` are DIFFERENT COMMANDS sharing a
+  # spelling. On macOS the program is eaten as a backup suffix, the edit never lands, and
+  # the mutant comes out byte-identical to the original. The mut() harness caught that
+  # honestly -- MUTATION-DID-NOT-APPLY, not a false PASS -- which is why it is worth
+  # keeping that third state. Write through a temp file instead; POSIX sed has no -i.
+  sed "$2" "$f" >"$f.ed" && mv -f "$f.ed" "$f"
     # A mutation that did not change the file proves the mutator's regex, not the battery.
     if cmp -s "$f" "$R/bus/merge.sh"; then echo "$1=MUTATION-DID-NOT-APPLY"; rm -f "$f"; return; fi
     if MERGE_NESTED=1 MERGE_IMPL=$f bash "$0" >/dev/null 2>&1

@@ -83,7 +83,12 @@ judge() {
 
   # Text only. grep on a binary/NUL/UTF-16 file prints "binary file matches" with no line number,
   # which read as clean; a gate that cannot read the bytes as text cannot judge them.
-  if ! LC_ALL=C command grep -Eq -- $'^[\t -~\x80-\xff]*$' "$abs" || LC_ALL=C command grep -qaP '\x00' "$abs"; then
+  # `grep -P` IS GNU/PCRE AND macOS DOES NOT HAVE IT. There the NUL half of this test errored
+  # out instead of matching, so the `||` fell through and a NUL-bearing file was accepted as
+  # text -- the gate failing open on exactly the input it exists to refuse. `tr -d` is POSIX:
+  # if deleting NULs changes the byte count, the file had NULs.
+  if ! LC_ALL=C command grep -Eq -- $'^[\t -~\x80-\xff]*$' "$abs" \
+     || [ "$(LC_ALL=C tr -d '\000' <"$abs" | wc -c)" != "$(wc -c <"$abs")" ]; then
     echo "CANNOT-ASSESS $rel not text"; bump 2; return
   fi
 

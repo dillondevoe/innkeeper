@@ -42,7 +42,11 @@ if [ -z "$missing" ]; then ok; else bad "H4-every-lane-heralded: missing$missing
 # The herald block is step 6. Pull the names it printed, in the order it printed them.
 heard=$(sed -n '/6\. The herald speaks/,/^$/p' "$O" | sed -n 's/^   \([a-z][a-z-]*\)  *.*/\1/p' | tr '\n' ' ')
 roster=$(printf '%s ' $LANES)
-arrival=$(printf '%s\n' $LANES | tac | tr '\n' ' ')
+# `tac` is GNU-only, same as the one the demo itself used. Missing it here made `arrival`
+# EMPTY, so H6 compared roster against "" and passed, and H7 reported a want of []. The
+# control arm was the thing that broke, and it broke into a pass.
+arrival=$(printf '%s\n' $LANES | awk '{a[NR]=$0} END{for(i=NR;i>0;i--) print a[i]}' | tr '\n' ' ')
+[ -n "${arrival// /}" ] || { echo "CANNOT-RUN hello-party-selftest: could not build the arrival order" >&2; exit 3; }
 chk H5-herald-is-roster-order "$heard" "$roster"
 # THE CONTROL. H5 alone passes if roster order and arrival order happen to coincide -- on
 # a four-name roster they would, for any demo that just echoed the directory back. This

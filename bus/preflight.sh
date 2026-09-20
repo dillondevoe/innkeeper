@@ -79,8 +79,15 @@ fi
 
 # Every roster name that may be ADDRESSED, so a dropped-name check can tell a brain from a
 # subject word. Read through actor.sh; this script never opens party.yaml for names.
+# TWO -e EXPRESSIONS, NOT `\(a\|b\)`. GNU sed accepts `\|` as alternation in a BASIC regex;
+# BSD sed (macOS) does not -- it matches a literal bar, so this produced NOTHING there. Every
+# token then failed the `known_names | grep -qx` test on line 124 and was skipped as a subject
+# word, which disabled the TRUNCATED and NO LANE checks ENTIRELY. Three arms went red together
+# and pointed at three different symptoms; the cause was one regex dialect. Note the direction:
+# an empty roster makes this gate report CLEAN on everything, so on macOS it failed open.
 known_names() { bash "$ACTOR" roster 2>/dev/null \
-  | sed -n 's/^\(lanes\|addressees\):[[:space:]]*//p' | tr ' ' '\n' | sed '/^$/d'; }
+  | sed -n -e 's/^lanes:[[:space:]]*//p' -e 's/^addressees:[[:space:]]*//p' \
+  | tr ' ' '\n' | sed '/^$/d'; }
 
 # report_one <path-or-basename> -> prints one report, rc 1 on any finding.
 #

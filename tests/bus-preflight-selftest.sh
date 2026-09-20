@@ -42,7 +42,9 @@ addressees: [teague]
 aliases:
   - { from: cleric, to: rabbot }
 YAML
-sed -i "s|BUSDIR|$WORK|" "$WORK/party.yaml"
+# sed -i is not portable (see mut() in the merge battery). This one is why three preflight
+# arms failed on macOS: the roster kept the literal BUSDIR and no addressee had a lane.
+sed "s|BUSDIR|$WORK|" "$WORK/party.yaml" >"$WORK/party.yaml.ed" && mv -f "$WORK/party.yaml.ed" "$WORK/party.yaml"
 
 run() { bash "$PRE" "$@" 2>&1; }          # combined output
 rcof() { bash "$PRE" "$@" >/dev/null 2>&1; echo $?; }
