@@ -7,9 +7,11 @@ stated shape instead of against a running system.
 **These three records are NOT in the same state, and the difference is the most useful
 thing on this page.** The bus message and the lease record are *read off shipped code* —
 `bus/enqueue.sh` and `lifecycle/lease.sh` write exactly these bytes today, and the field
-lists below were derived from the write sites, not from memory. The quest record is a
-**proposal**: nothing writes one yet. Build against all three, but expect drift only in
-the third.
+lists below were derived from the write sites, not from memory. As of the hello-party slice the quest record is read off
+shipped code too: `bus/quest.sh` writes exactly these bytes, and `tests/bus-quest-selftest.sh`
+reads the committed `fixtures/quests/first-light.yaml` back through that script's own reader,
+so this table and the writer are pinned to each other by a program rather than by memory.
+All three are now derived from write sites.
 
 If any of this changes, THIS FILE changes in the same commit as the code, and consumers
 are told in one line. A schema that documents an older version of its own writer is worse
@@ -17,7 +19,7 @@ than no schema, because it is trusted.
 
 ---
 
-## 1. Quest record — PROPOSED (nothing writes this yet)
+## 1. Quest record — SHIPPED (`bus/quest.sh`)
 
 A quest is the unit of work a party is given. One file per quest:
 
@@ -29,7 +31,7 @@ A quest is the unit of work a party is given. One file per quest:
 | `title` | string, one line | yes | What a tavern view shows in a list. |
 | `brief` | string, multi-line | yes | The actual ask. Prose, not a spec. |
 | `state` | enum | yes | `open` \| `claimed` \| `blocked` \| `done` \| `abandoned` |
-| `lane` | string \| null | yes | Roster `brains[].name` holding it, or `null` when `open`. Must resolve through `bus/actor.sh resolve`. |
+| `lane` | string \| null | yes | Roster `brains[].name` holding it, or `null` when `open`. Checked for MEMBERSHIP against `bus/actor.sh lanes` — not merely passed through `resolve`, which returns an unknown token unchanged and would let an addressee who owns no queue hold a quest forever. |
 | `created` | UTC `%Y-%m-%dT%H:%M:%SZ` | yes | Machine-stamped. Never hand-typed. |
 | `updated` | UTC, same format | yes | Machine-stamped on every state change. |
 | `origin` | string \| null | yes | Basename of the comm that raised it, or `null` if raised directly. |

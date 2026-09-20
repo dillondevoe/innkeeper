@@ -33,15 +33,23 @@ ACTOR="$REPO/bus/actor.sh"
 
 case "${1:-}" in --selftest) exec bash "$REPO/tests/staff-inbound-selftest.sh";; esac
 
-_bus() {
-  local b
-  b=$(sed -e 's/[[:space:]]*#.*$//' "${INNKEEPER_PARTY:-$REPO/party.yaml}" 2>/dev/null \
-      | sed -n 's/^[[:space:]]*bus:[[:space:]]*\(.*[^[:space:]]\)[[:space:]]*$/\1/p' | head -1)
-  b=${b%\"}; b=${b#\"}; [ -n "$b" ] || b="${INNKEEPER_HOME:-$REPO}/bus"
-  case "$b" in "~"/*) b="$HOME/${b#\~/}";; esac
-  echo "$b"
-}
-CD="${1:-${INNKEEPER_COMMS:-$(_bus)/comms}}"
+# The bus path comes from `actor.sh bus` — the ONE roster reader. This file used to carry
+# its own copy of that sed; so did two others, and all three silently defaulted to a local
+# `bus/` when the roster was unreadable. actor.sh refuses instead.
+#
+# THE RC IS CONSUMED AT THE ASSIGNMENT, NOT INSIDE A HELPER. A helper that `exit`s on
+# refusal exits only the command-substitution SUBSHELL: the caller gets the empty string,
+# runs on, and the first thing it does with an empty $BUS is `mkdir -p /queues`. That is
+# the same collapse of "it refused" into "it answered empty" that this repo's roster guard
+# was written for, and the first version of this very comment shipped above code that
+# committed it.
+if [ -n "${1:-}" ]; then CD=$1
+elif [ -n "${INNKEEPER_COMMS:-}" ]; then CD=$INNKEEPER_COMMS
+else
+  _b=$(bash "$ACTOR" bus) || { echo "FATAL: actor.sh refused to name the bus (unreadable roster?)" >&2; exit 2; }
+  [ -n "$_b" ] || { echo "FATAL: actor.sh named an empty bus path" >&2; exit 2; }
+  CD=$_b/comms
+fi
 # NORMALISE trailing slashes. `find` prints its START POINT verbatim, so a `dir/` argument
 # carries the slash into every expansion below and `${f##*/}` yields the EMPTY STRING — the
 # entry then vanishes from tier 1 in silence. Strip once, here, so every call site downstream

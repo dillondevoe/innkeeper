@@ -6,6 +6,8 @@
 #   actor.sh resolve <name>                an alias -> the roster name it addresses
 #   actor.sh field <brain> <key>           a per-brain scalar off the roster row (rc 1 = absent)
 #   actor.sh list <key>                    a top-level flow list, one item per line
+#   actor.sh lanes                         the brains that own a queue lane, one per line
+#   actor.sh bus                           the party's bus directory, absolute
 #   actor.sh roster                        lanes / addressees / aliases, as read from party.yaml
 #   actor.sh --selftest
 #
@@ -56,6 +58,21 @@ _alias_of() {  # $1 = token -> the roster name it resolves to, or the token itse
   local a
   a=$(_section aliases | sed -n "s/.*from:[[:space:]]*$1[[:space:]]*,[[:space:]]*to:[[:space:]]*\([A-Za-z0-9_-]*\).*/\1/p" | head -1)
   [ -n "$a" ] && echo "$a" || echo "$1"
+}
+
+# The bus PATH is roster data too, and until this verb existed three scripts carried a
+# byte-for-byte copy of this reader — including staff/inbound.sh, whose own comment says
+# "this file never opens the roster" eight lines below the copy that does. They had not
+# drifted yet, which is exactly when consolidating is free. INNKEEPER_BUS is honoured HERE
+# so the override means the same thing to every caller; it used to be read by one of them.
+_busdir() {
+  local b
+  b=$(sed -e 's/[[:space:]]*#.*$//' "$PARTY" 2>/dev/null \
+      | sed -n 's/^[[:space:]]*bus:[[:space:]]*\(.*[^[:space:]]\)[[:space:]]*$/\1/p' | head -1)
+  b=${b%\"}; b=${b#\"}
+  [ -n "$b" ] || b="${INNKEEPER_HOME:-$(cd "$(dirname "$0")/.." && pwd -P)}/bus"
+  case "$b" in "~"/*) b="$HOME/${b#\~/}";; esac
+  printf '%s\n' "$b"
 }
 
 LANES=" $(_lanes) "
@@ -159,6 +176,13 @@ case "${1:-}" in
             # duplication this script was ported to remove.
             [ $# -eq 2 ] || { echo "usage: actor.sh list <key>" >&2; exit 2; }
             _list "$2";;
+  lanes)    # the brains that own a queue lane. `list` reads flow lists and cannot answer
+            # this; a caller that needs it otherwise greps `roster`'s printed output, which
+            # is how lifecycle/ticks.sh once gave one brain two counters.
+            [ $# -eq 1 ] || { echo "usage: actor.sh lanes" >&2; exit 2; }
+            for t in $LANES; do echo "$t"; done;;
+  bus)      [ $# -eq 1 ] || { echo "usage: actor.sh bus" >&2; exit 2; }
+            echo "${INNKEEPER_BUS:-$(_busdir)}";;
   roster)   echo "party:      $PARTY"; echo "lanes:     $LANES"; echo "addressees:$NAMES"
             echo "aliases:   $(_section aliases | tr -d ' ' | tr '\n' ' ')";;
   --selftest) exec bash "$(cd "$(dirname "$0")/.." && pwd -P)/tests/bus-actor-selftest.sh";;

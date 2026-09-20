@@ -40,15 +40,18 @@ ACTOR="$HERE/actor.sh"
 PARTY=${INNKEEPER_PARTY:-${INNKEEPER_HOME:-$REPO}/party.yaml}
 export INNKEEPER_PARTY="$PARTY"
 
-_bus() {
-  local b
-  b=$(sed -e 's/[[:space:]]*#.*$//' "$PARTY" 2>/dev/null | sed -n 's/^[[:space:]]*bus:[[:space:]]*\(.*[^[:space:]]\)[[:space:]]*$/\1/p' | head -1)
-  b=${b%\"}; b=${b#\"}
-  [ -n "$b" ] || b="${INNKEEPER_HOME:-$REPO}/bus"
-  case "$b" in "~"/*) b="$HOME/${b#\~/}";; esac
-  echo "$b"
-}
-BUS=${INNKEEPER_BUS:-$(_bus)}
+# The bus path comes from `actor.sh bus` — the ONE roster reader. This file used to carry
+# its own copy of that sed; so did two others, and all three silently defaulted to a local
+# `bus/` when the roster was unreadable. actor.sh refuses instead.
+#
+# THE RC IS CONSUMED AT THE ASSIGNMENT, NOT INSIDE A HELPER. A helper that `exit`s on
+# refusal exits only the command-substitution SUBSHELL: the caller gets the empty string,
+# runs on, and the first thing it does with an empty $BUS is `mkdir -p /queues`. That is
+# the same collapse of "it refused" into "it answered empty" that this repo's roster guard
+# was written for, and the first version of this very comment shipped above code that
+# committed it.
+BUS=$(bash "$ACTOR" bus) || { echo "FATAL: actor.sh refused to name the bus (unreadable roster?)" >&2; exit 2; }
+[ -n "$BUS" ] || { echo "FATAL: actor.sh named an empty bus path" >&2; exit 2; }
 COMMS="$BUS/comms"
 DONE="$COMMS/_done"
 QUEUES="$BUS/queues"
