@@ -7,6 +7,23 @@ HERE=$(cd "$(dirname "$0")/.." && pwd -P)
 EXPECT_ARMS=27
 pass=0 fail=0 arms=0
 
+# THE SECRETS SCANNER IS A PRECONDITION, AND A MISSING ONE IS NOT A FAILING ARM.
+# port-gate.sh correctly answers CANNOT-ASSESS when gitleaks is absent -- that is the gate
+# behaving well. But every arm here asserts a real verdict, so without the scanner they all
+# fail at once and the battery reads exactly like broken code. A stranger cloning this repo
+# then sees RED and has nothing telling them to install anything.
+# So: rc 3 = CANNOT-RUN, its own state, distinct from RED and from green. tests/run-all.sh
+# reads that code and shows the reason. The arms are NOT skipped-and-counted-as-passing --
+# that is how a skipped check disappears into a byte-identical green; the battery refuses to
+# render a verdict at all.
+GITLEAKS=${INNKEEPER_GITLEAKS:-gitleaks}
+if ! command -v "$GITLEAKS" >/dev/null 2>&1; then
+  echo "CANNOT-RUN bin-port-gate-selftest: secrets scanner '$GITLEAKS' not on PATH." >&2
+  echo "  Install gitleaks, or point INNKEEPER_GITLEAKS at it. No verdict is rendered:" >&2
+  echo "  every arm here asserts a real gate verdict and would fail for the scanner's absence." >&2
+  exit 3
+fi
+
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 R=$T/repo; mkdir -p "$R"/bin "$R"/bus "$R"/docs "$R"/tests
 cp "$HERE"/bin/port-gate.sh "$R"/bin/
