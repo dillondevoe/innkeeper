@@ -1,6 +1,6 @@
-# SCHEMA — the quest record, the bus message, the lease record
+# SCHEMA — the quest record, the bus message, the lease record, the merged result
 
-The three records a party writes to disk. Published **before** the hello-party slice is
+The four records a party writes to disk. Published **before** the hello-party slice is
 finished, so a consumer (a live tavern view, a replay harness) can be built against a
 stated shape instead of against a running system.
 
@@ -120,6 +120,45 @@ relaunches for its remaining minutes. `boot_epoch: 0` (unknown) degrades to TTL 
 
 Never hand-edit a lease file. Read it with `lease.sh status`, which returns
 `FREE` | `HELD age=<s> nonce=<n>` | `STALE age=<s> nonce=<n> [(previous boot)]`.
+
+---
+
+## 4. Merged result — SHIPPED (`bus/merge.sh` writes this)
+
+The output of a quest, and the one file in this repo whose EXISTENCE is a decision:
+
+    $INNKEEPER_HOME/state/merged/<quest-id>.out     the result
+    $INNKEEPER_HOME/state/merged/<quest-id>.by      attribution, not truth
+
+| path | type | notes |
+|---|---|---|
+| `<id>.out` | the worker's bytes, verbatim | Created by `ln` from the staged attempt file. Its presence *is* "this quest has been merged"; there is no separate flag. Never rewritten. |
+| `<id>.by` | `<lane> <UTC timestamp>`, one line | Written **after** the link, best-effort. Attribution only. |
+
+**The artifact is its own receipt, and that is the whole design.** `ln` fails with `EEXIST`
+if the destination is already there, so the commit tests and sets in one indivisible step —
+there is no read-then-write window for a second worker to fit inside. A separate
+`<id>.merged` marker would make the receipt a SECOND WRITER, and a worker killed between the
+two writes would leave either a receipt with no result or a result with no receipt, the second
+of which the next worker merges again.
+
+**`<id>.by` is never consulted to decide whether a merge may happen.** A worker killed between
+the link and the sidecar leaves `status` reporting `MERGED by=unknown at=unknown`, which is
+correct and complete for the only question that governs behaviour. Nothing branches on `by`.
+
+**Staged work is not a result and is stored somewhere else on purpose:**
+
+    $INNKEEPER_HOME/work/<quest-id>/<lane>.<pid>/...
+
+A killed worker leaves a partial here. It is invisible to `merge.sh status` by construction —
+a consumer that went looking for results under `work/` would be reading half-written bytes and
+rendering them as finished work.
+
+Read this with `merge.sh status <id>`, which returns `UNMERGED` | `MERGED by=<lane> at=<ts>`,
+and `merge.sh dest <id>` for the path. **Stated limit:** `ln` is a hard link, so the staged
+file and the destination must share a filesystem; both live under `$INNKEEPER_HOME`. If that
+stops being true the commit does not silently degrade — the link fails, nothing is at the
+destination, and `merge.sh` exits 2 rather than reporting a merge it did not perform.
 
 ---
 

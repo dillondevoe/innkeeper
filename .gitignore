@@ -3,3 +3,7 @@
 # HOST, so committing it carries a machine name out of the stack and into the public
 # product. The store is created on first use — nothing here is part of the artifact.
 state/
+
+# mutation-arm staging: mutants live in bus/ so they can resolve actor.sh; a crashed
+# battery must not be able to leave one behind as a committable file.
+bus/.mut-*
