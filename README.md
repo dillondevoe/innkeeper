@@ -27,7 +27,10 @@ and would recurse, so run it directly: `bash tests/run-all-selftest.sh`.)
 
 The port gate's battery needs [gitleaks](https://github.com/gitleaks/gitleaks) on `PATH`, or
 `INNKEEPER_GITLEAKS` pointing at it. Without it that battery reports CANNOT-RUN with the reason
-rather than a verdict, because every one of its arms asserts a real scan result.
+rather than a verdict, because every one of its arms asserts a real scan result. **A CANNOT-RUN
+fails the suite** (`run-all.sh` exits non-zero), the same as a RED: a battery that could not run
+is not a battery that passed, and the fresh-clone default on a machine without gitleaks is
+therefore 14/15 and rc=1 until you install it.
 
 ## Then kill a worker
 
