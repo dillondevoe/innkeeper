@@ -4,8 +4,8 @@
 set -uo pipefail
 R=$(cd "$(dirname "$0")/.." && pwd -P)
 IMPL=${LEASE_IMPL:-$R/lifecycle/lease.sh}
-EXPECT_ARMS=${LEASE_NESTED:+20}
-EXPECT_ARMS=${EXPECT_ARMS:-23}
+EXPECT_ARMS=${LEASE_NESTED:+26}
+EXPECT_ARMS=${EXPECT_ARMS:-30}
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 # LEASE_AWAKE_S IS PINNED FOR THE WHOLE BATTERY, and that is not tidiness.
 # Without it every arm inherits whatever awake clock the HOST happens to have, so the
@@ -79,7 +79,7 @@ arm S3-reboot-beats-the-awake-clock "$(LEASE_AWAKE_S=100000 SL status)" '^STALE 
 # clock -- the old behaviour, stated -- and must NOT read the missing field as "awake for 0s",
 # which would make every legacy lock look infinitely old.
 echo "$(( $(date +%s) - 3600 )) livenonce 1000" > "$S/state/tester.lease"
-arm S4-legacy-lock-falls-back-to-wall "$(LEASE_AWAKE_S=100000 SL status)" '^STALE age=3600 nonce=livenonce$'
+arm S4-legacy-lock-falls-back-to-wall "$(LEASE_AWAKE_S=100000 SL status)" '^STALE age=360[0-9] nonce=livenonce$'
 
 # S5/S5b: A HOST WITH NO AWAKE CLOCK MUST SAY SO. Geist's gate on the sleep lease: the fallback
 # to wall-clock aging works exactly as written on a host without /proc/uptime -- and says
@@ -88,10 +88,47 @@ arm S4-legacy-lock-falls-back-to-wall "$(LEASE_AWAKE_S=100000 SL status)" '^STAL
 # not. LEASE_AWAKE_S= (set but EMPTY) is the no-clock host: it takes the same branch a missing
 # /proc/uptime takes, which is why awake_seconds() returns "" rather than 0 for both.
 echo "$(( $(date +%s) - 10 )) livenonce 1000 " > "$S/state/tester.lease"
-arm S5-no-awake-clock-states-the-limit "$(LEASE_AWAKE_S= LEASE_UPTIME_FILE=/nonexistent/uptime SL status)" 'no awake clock on this host'
+# LEASE_PYTHON is pinned at a path that does not exist for the same reason LEASE_UPTIME_FILE is:
+# this host HAS a working CLOCK_UPTIME_RAW, so leaving the python source live would hand the arm a
+# real clock and it would assert the limit note on a host that has no limit. An arm that inherits
+# an ambient input measures the machine, not the code.
+arm S5-no-awake-clock-states-the-limit "$(LEASE_AWAKE_S= LEASE_UPTIME_FILE=/nonexistent/uptime LEASE_PYTHON=/nonexistent/python3 SL status)" 'no awake clock on this host'
 # THE CONTROL, and it is the half that can rot: a note printed unconditionally would pass S5
 # while telling every Linux user their clock is broken. This asserts SILENCE where the clock exists.
 arm S5b-CONTROL-a-host-with-a-clock-says-nothing "$(LEASE_AWAKE_S=100000 SL status)" '^HELD age=[0-9]+ nonce=livenonce$'
+
+# ---- THE DARWIN AWAKE CLOCK (S6-S10) --------------------------------------------------------
+# A host with no /proc/uptime but a working CLOCK_UPTIME_RAW. The fake interpreter is the whole
+# instrument: it reproduces a Darwin host on Linux by travelling the SAME second branch, rather
+# than asserting the verdict that branch is supposed to produce.
+FAKEPY=$T/fakepy; mkdir -p "$FAKEPY"
+mkpy() { printf '#!/bin/sh
+%s
+' "$2" > "$FAKEPY/$1"; chmod +x "$FAKEPY/$1"; }
+mkpy py-100000 'echo 100000'
+mkpy py-103600 'echo 103600'
+mkpy py-attrerr 'echo "AttributeError: module time has no attribute CLOCK_UPTIME_RAW" >&2; exit 1'
+mkpy py-float   'echo 100000.42'
+mkpy py-zero    'echo 0'
+DARWIN() { LEASE_AWAKE_S= LEASE_UPTIME_FILE=/nonexistent/uptime LEASE_PYTHON=$FAKEPY/$1 SL "$2"; }
+
+echo "$(( $(date +%s) - 3600 )) livenonce 1000 99995" > "$S/state/tester.lease"
+arm S6-darwin-clock-saves-a-sleeping-holder "$(DARWIN py-100000 status)" '^HELD age=5 nonce=livenonce$'
+# THE CONTROL, and it is the arm that makes S6 mean anything: same branch, same lock, same wall
+# age -- only the number the interpreter prints differs, and the verdict flips. Without it S6 also
+# passes on code that merely detects a python3 and then ages on the wall clock anyway.
+arm S6b-CONTROL-the-value-is-read-not-just-the-presence "$(DARWIN py-103600 status)" '^STALE age=3605 nonce=livenonce$'
+
+# THE FOUR WAYS THE CLOCK CAN FAIL. Each one must reach the SAME place -- empty, wall-clock aging,
+# limit stated -- and never a stored 0. The lock is deliberately left with its awake field, so a
+# reader that accepted the bad value would compute age 5 and print HELD; only a reader that
+# rejected it falls back to the wall and prints STALE age=3600 with the note.
+arm S7-no-python3-falls-back    "$(DARWIN nonexistent-python3 status)" '^STALE age=360[0-9] nonce=livenonce \[no awake clock'
+arm S8-attributeerror-falls-back "$(DARWIN py-attrerr status)"         '^STALE age=360[0-9] nonce=livenonce \[no awake clock'
+arm S9-non-integer-falls-back    "$(DARWIN py-float status)"           '^STALE age=360[0-9] nonce=livenonce \[no awake clock'
+# S10 IS THE ONE THE WHOLE FILE IS ABOUT. A clock that reads 0 is ABSENT, not "awake for zero
+# seconds": stored, it makes every subsequent age come out 0 and the lease NEVER goes stale.
+arm S10-zero-is-absent-not-zero  "$(DARWIN py-zero status)"            '^STALE age=360[0-9] nonce=livenonce \[no awake clock'
 
 # ---- MUTATION ARMS -------------------------------------------------------------------------
 # Mutants are staged INSIDE lifecycle/ even though lease.sh derives no path from its own location.
@@ -123,6 +160,11 @@ if [ -z "${LEASE_NESTED:-}" ]; then
   # D2 -- decide the awake clock BEFORE the reboot check, so a previous-boot lock reads as fresh.
   arm D2-reboot-must-be-decided-first \
     "$(mut D2 's/^  if \[ "\$lboot" != 0 \] && \[ "\$BOOT" != 0 \] && \[ "\$lboot" != "\$BOOT" \]; then$/  if false; then/')" '^D2=PASS$'
+  # D3 -- accept a 0 from the awake clock. This is the absent-is-zero collapse: a lock stamped 0
+  # ages at 0 forever and the lease never goes stale, which is a lane held by a dead holder for
+  # the life of the process. S10 is the arm that must go red on it.
+  arm D3-a-reader-that-accepts-zero-is-caught \
+    "$(mut D3 's/^  \[ "\$1" -ge 1 \]$/  [ "$1" -ge 0 ]/')" '^D3=PASS$'
 fi
 
 echo "lifecycle-lease-selftest: $pass/$n passed (expected $EXPECT_ARMS arms)"

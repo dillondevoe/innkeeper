@@ -61,17 +61,33 @@ BOOT=$(boot_epoch)
 # boot check. Expiring a LIVE holder's lane hands two workers the same task and corrupts quietly.
 # When a clock is uncertain, the safe error is to keep the lane held.
 #
-# NO AWAKE CLOCK IS KNOWN FOR DARWIN YET, AND THE OBVIOUS CANDIDATE IS WORSE THAN NOTHING.
-# `python3 -c 'import time; print(int(time.monotonic()))'` returns **0** on macOS 26, which this
-# code would store and later read as "awake for zero seconds" -- so every lease would compute
-# age 0 and NEVER go stale. That is the absent-is-not-zero collapse above, arriving through the
-# fix for it. Measured on a macOS host: CLOCK_MONOTONIC equals wall-seconds-since-kern.boottime exactly
-# (2672134 both), so it counts sleep and is just a wall clock; CLOCK_UPTIME_RAW read 12s HIGHER
-# than that, which no sleep-excluding clock can do. Neither is a candidate, and neither test
-# discriminates anyway on a machine that has not slept: the question can only be settled by
-# reading a clock before and after a real suspend. Until someone does, Darwin has no awake clock
-# here and SAYS SO -- see awake_clock_note() below. A stated limit is shippable; a silent one is
-# not, and a guessed one is the bug wearing the fix's clothes.
+# DARWIN'S AWAKE CLOCK IS `CLOCK_UPTIME_RAW`, and the two earlier candidates were both wrong.
+# This file used to say Darwin had no awake clock, on the strength of two readings taken on a
+# host that HAD NOT SLEPT ONCE THIS BOOT. A machine that never suspends cannot tell a
+# sleep-counting clock from a sleep-excluding one: every candidate equals wall-since-boot there,
+# whatever it does during sleep. Both of my "measurements" were of that kind, and the 12s
+# discrepancy I read as disqualifying `CLOCK_UPTIME_RAW` was `kern.boottime` drifting under NTP
+# over 31 days, not the clock. A MEASUREMENT TAKEN ON A HOST THAT CANNOT EXHIBIT THE PHENOMENON
+# IS NOT A MEASUREMENT OF IT.
+#
+# It was measured on a Mac that HAD slept -- three suspends that boot, 504s logged by `pmset`:
+#     CLOCK_MONOTONIC      wall-minus-clock =   0.9s  -> counts sleep (a wall clock, renamed)
+#     CLOCK_MONOTONIC_RAW  wall-minus-clock =  -3.8s  -> counts sleep
+#     CLOCK_UPTIME_RAW     wall-minus-clock = 493.5s  -> EXCLUDES sleep (504s logged, ~10s of it
+#                                                        spent in suspend entry/exit transitions)
+#
+# The `time.monotonic()` 0 recorded above was real and was the INTERPRETER, not the OS: Apple's
+# system python3 (3.9.6) returns seconds since the PROCESS started, Homebrew's 3.14 returns mach
+# time. The same one-liner is an awake clock or a near-zero constant depending on which python3
+# the PATH finds -- which is exactly why the candidate adopted here names the clock explicitly
+# (`time.clock_gettime(time.CLOCK_UPTIME_RAW)`) rather than trusting `monotonic()` to be it.
+# Verified identical on 3.9.6 and 3.14, on two Macs.
+#
+# EVERY FALLBACK PATH STILL LEADS TO EMPTY, NEVER TO ZERO. `python3` absent, the attribute
+# absent (AttributeError on an older/odd build), output that is not an integer, or a value < 1 --
+# each one yields "" and the stated-limit note below, because a stored 0 computes age 0 forever
+# and the lease NEVER goes stale. That is the absent-is-not-zero collapse arriving through the
+# fix for it, and it is the mutant D3 shows red.
 awake_seconds() {
   local a="${LEASE_AWAKE_S:-}"
   [ -n "$a" ] && { echo "$a"; return; }
@@ -81,7 +97,20 @@ awake_seconds() {
   # to here and finds Linux's real /proc/uptime, so an arm written that way passes on macOS and
   # is vacuous on Linux, which is the substrate asymmetry this whole file just paid for.
   a=$(awk '{print int($1)}' "${LEASE_UPTIME_FILE:-/proc/uptime}" 2>/dev/null) || a=""
-  echo "$a"   # empty means NO AWAKE CLOCK ON THIS HOST -- not "zero seconds awake"
+  if awake_is_usable "$a"; then echo "$a"; return; fi
+  # Darwin (and anything else without /proc/uptime). The clock is named explicitly; see above.
+  a=$("${LEASE_PYTHON:-python3}" -c \
+        'import time; print(int(time.clock_gettime(time.CLOCK_UPTIME_RAW)))' 2>/dev/null) || a=""
+  if awake_is_usable "$a"; then echo "$a"; return; fi
+  echo ""    # empty means NO AWAKE CLOCK ON THIS HOST -- not "zero seconds awake"
+}
+
+# The single admission test, so both sources are judged by one rule rather than two spellings of
+# it. Rejects: empty (no output), anything non-numeric (an error message, a float, a stray line),
+# and anything < 1. The `< 1` clause is what keeps a literal 0 out of the lock file.
+awake_is_usable() {
+  case "${1:-}" in '' | *[!0-9]*) return 1 ;; esac
+  [ "$1" -ge 1 ]
 }
 AWAKE=$(awake_seconds)
 
