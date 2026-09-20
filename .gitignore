@@ -7,3 +7,4 @@ state/
 # mutation-arm staging: mutants live in bus/ so they can resolve actor.sh; a crashed
 # battery must not be able to leave one behind as a committable file.
 bus/.mut-*
+lifecycle/.mut-*

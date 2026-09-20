@@ -99,27 +99,48 @@ One brain, one lane, one live holder:
 
     $INNKEEPER_HOME/state/<brain>.lease
 
-A single line, three space-separated fields, written atomically (`mktemp` + `mv -f`):
+A single line, four space-separated fields, written atomically (`mktemp` + `mv -f`):
 
-    <claimed_epoch> <nonce> <boot_epoch>
+    <claimed_epoch> <nonce> <boot_epoch> <awake_seconds>
 
 | field | type | notes |
 |---|---|---|
 | `claimed_epoch` | integer, Unix seconds | Rewritten on every `renew`. Age is `now - claimed_epoch`. |
 | `nonce` | uuid (or 16 random bytes hex) | The holder's proof. `renew`/`release` without it return `NOT-HOLDER`. |
 | `boot_epoch` | integer, Unix seconds, `0` = unknown | The machine boot the lease was claimed under. |
+| `awake_seconds` | integer, or **absent** | A clock that does not advance while the machine is suspended (Linux `/proc/uptime`). **Absent means this host has no awake clock — it does not mean zero.** A lock written by the older three-field code has no fourth field and is read as absent. |
 
 Example:
 
-    1758376324 9f3a1c7e-5b20-4e11-8d6a-77c0e2b41a99 1758298811
+    1758376324 9f3a1c7e-5b20-4e11-8d6a-77c0e2b41a99 1758298811 99995
 
-**A lease is stale on EITHER of two conditions, and the second is the one worth copying.**
-Older than `LEASE_TTL` (default 1800s), *or* claimed under a different `boot_epoch` — a
-process cannot hold a lease across a reboot, so a TTL alone leaves a dead holder blocking
-relaunches for its remaining minutes. `boot_epoch: 0` (unknown) degrades to TTL only.
+**Staleness is decided in two steps, and the order matters.**
+
+1. **A different `boot_epoch` is stale, full stop.** A process cannot hold a lease across a
+   reboot, and a TTL alone leaves a dead holder blocking relaunches for its remaining minutes.
+   This is decided FIRST because `awake_seconds` restarts at zero on reboot, so a lock from the
+   previous boot can show a tiny awake delta and would otherwise read as freshly held — which
+   blocks a live lane forever rather than merely stealing one.
+2. **Otherwise the lease ages on the awake clock**, when both the host and the lock carry one:
+   stale once `awake_seconds` has advanced by `LEASE_TTL` (default 1800s). With no awake clock
+   on either side it falls back to wall-clock age, which is the older behaviour.
+
+**Why the awake clock — the laptop-sleep case.** The wall clock keeps running while a machine is
+suspended. A laptop that sleeps an hour wakes with every lease older than any TTL worth picking,
+so a second instance sees `STALE` and claims a lane whose holder is alive and mid-task — two live
+holders, the exact thing the lease exists to prevent. The holder cannot defend itself: it was
+frozen, so it could not renew. An awake clock excludes suspend by construction, which makes
+"the holder is dead" and "the machine was asleep" two different readings instead of one.
+
+**Direction of failure, chosen deliberately:** this makes leases expire LATER, never earlier.
+Holding a dead holder's lane too long blocks a relaunch — visible, and cleared by the boot check
+on the next restart. Expiring a LIVE holder's lane hands two workers the same task and corrupts
+quietly. When a clock is uncertain, the safe error is to keep the lane held.
 
 Never hand-edit a lease file. Read it with `lease.sh status`, which returns
-`FREE` | `HELD age=<s> nonce=<n>` | `STALE age=<s> nonce=<n> [(previous boot)]`.
+`FREE` | `HELD age=<s> nonce=<n>` | `STALE age=<s> nonce=<n> [(previous boot)]`. **`age` is the
+age the verdict was made on** — awake-seconds when the awake clock decided it, wall-seconds
+otherwise — so the number never contradicts the verdict printed beside it.
 
 ---
 
