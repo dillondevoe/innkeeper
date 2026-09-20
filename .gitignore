@@ -1,0 +1,5 @@
+
+# Runtime state. ticks.sh and recycle.sh write here; the log is named after the
+# HOST, so committing it carries a machine name out of the stack and into the public
+# product. The store is created on first use — nothing here is part of the artifact.
+state/

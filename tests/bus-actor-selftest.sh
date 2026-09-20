@@ -140,5 +140,35 @@ got=$(INNKEEPER_PARTY="$REPO/party.yaml" bash "$A" targets 'rabbot-to-page-geist
 [ $rc -eq 0 ] && echo "  PASS control  a parsing roster is not refused" || { echo "  FAIL control  refused a good roster rc=$rc"; fail=1; }
 rm -rf "$blk"
 
+# --- the three verbs the lifecycle scripts consume: resolve / field / list -----------
+# These exist so that ticks.sh and recycle.sh never parse party.yaml themselves. That is
+# the whole point: a second reader of the roster is the defect the port removes, so these
+# arms are the contract that keeps the second reader from being written again.
+eq "resolve alias"     "rabbot" "$(bash "$A" resolve cleric)"
+eq "resolve canonical" "geist"  "$(bash "$A" resolve geist)"
+# An unknown token resolves to ITSELF and exits 0. It must not become empty: ticks.sh
+# names a state file after this value, and an empty one writes .json at the store root.
+eq "resolve unknown is identity" "nosuchbrain" "$(bash "$A" resolve nosuchbrain)"
+eq "field recycle_after" "12" "$(bash "$A" field rabbot recycle_after)"
+# field takes the ALIAS too, or the caller has to resolve first and we are back to two
+# readers spelling one rule.
+eq "field via alias"     "12" "$(bash "$A" field cleric recycle_after)"
+# An absent key is rc 1 AND empty — not rc 0 with empty output. ticks.sh branches on the
+# rc to fall back to its built-in threshold; a silent empty would make that fallback
+# unreachable and every brain's threshold would come out as the default.
+got=$(bash "$A" field geist nosuchkey 2>/dev/null); rc=$?
+[ $rc -eq 1 ] && [ -z "$got" ] && echo "  PASS field absent key rc=1 empty" \
+  || { echo "  FAIL field absent key want rc=1+empty, got rc=$rc [$got]"; fail=1; }
+# CONTROL for that arm: a key that IS present must return rc 0, or the arm above passes
+# on a verb that fails for everything.
+bash "$A" field geist recycle_after >/dev/null 2>&1 \
+  && echo "  PASS control field present key rc=0" \
+  || { echo "  FAIL control field present key did not return rc=0"; fail=1; }
+# list reads a flow list; launchers is the one recycle.sh consumes.
+bash "$A" list launchers | grep -q 'start-' \
+  && echo "  PASS list launchers yields a glob" \
+  || { echo "  FAIL list launchers yielded nothing"; fail=1; }
+eq "list of an absent key is empty" "" "$(bash "$A" list nosuchlist)"
+
 [ $fail -eq 0 ] && echo "SELFTEST: ALL PASS" || echo "SELFTEST: FAILURES"
 exit $fail

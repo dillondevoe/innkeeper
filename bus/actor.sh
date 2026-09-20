@@ -3,6 +3,9 @@
 #
 #   actor.sh is-actor <brain> <basename>   rc 0 if <brain> must ACT on this comm, 1 if not
 #   actor.sh targets <basename>            the lanes this comm is dispatched to, one per line
+#   actor.sh resolve <name>                an alias -> the roster name it addresses
+#   actor.sh field <brain> <key>           a per-brain scalar off the roster row (rc 1 = absent)
+#   actor.sh list <key>                    a top-level flow list, one item per line
 #   actor.sh roster                        lanes / addressees / aliases, as read from party.yaml
 #   actor.sh --selftest
 #
@@ -37,7 +40,18 @@ _section() {  # $1 = top-level key -> that block's lines
     | sed -n "/^$1:[[:space:]]*\$/,/^[a-z_]/{ /^[a-z_]/d; p; }"
 }
 _lanes() { _section brains | sed -n 's/.*[{,][[:space:]]*name:[[:space:]]*\([A-Za-z0-9_-]*\).*/\1/p' | tr '\n' ' '; }
-_extra() { sed -n 's/^addressees:[[:space:]]*\[\([^]]*\)\].*/\1/p' "$PARTY" 2>/dev/null | tr ',' ' '; }
+_list() {  # $1 = top-level key written as a flow list -> its items, one per line
+  sed -e 's/[[:space:]]*#.*$//' "$PARTY" 2>/dev/null \
+    | sed -n "s/^$1:[[:space:]]*\[\([^]]*\)\].*/\1/p" | tr ',' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//; /^$/d'
+}
+_extra() { _list addressees | tr '\n' ' '; }
+_field() {  # $1 = brain, $2 = key -> that brain's value for the key, rc 1 if the row has none
+  local v
+  v=$(_section brains | command grep -E "[{,][[:space:]]*name:[[:space:]]*$1[[:space:]]*[,}]" \
+      | sed -n "s/.*[{,][[:space:]]*$2:[[:space:]]*\([^,}]*\).*/\1/p" | sed 's/[[:space:]]*$//' | head -1)
+  [ -n "$v" ] || return 1
+  printf '%s\n' "$v"
+}
 _alias_of() {  # $1 = token -> the roster name it resolves to, or the token itself
   local a
   a=$(_section aliases | sed -n "s/.*from:[[:space:]]*$1[[:space:]]*,[[:space:]]*to:[[:space:]]*\([A-Za-z0-9_-]*\).*/\1/p" | head -1)
@@ -131,6 +145,20 @@ case "${1:-}" in
             is_actor "$2" "$3";;
   targets)  [ $# -eq 2 ] || { echo "usage: actor.sh targets <basename>" >&2; exit 2; }
             targets "$2";;
+  resolve)  # an alias (or a roster name) -> the roster name it addresses. Exported because
+            # every caller that keys a per-brain FILE on a name must resolve it first, or one
+            # brain accrues two counters under two spellings and neither reaches threshold.
+            [ $# -eq 2 ] || { echo "usage: actor.sh resolve <name>" >&2; exit 2; }
+            _alias_of "$2";;
+  field)    # a per-brain scalar off the roster row. rc 1 = the row carries no such key,
+            # which the caller must tell apart from a value of 0 — see lifecycle/ticks.sh.
+            [ $# -eq 3 ] || { echo "usage: actor.sh field <brain> <key>" >&2; exit 2; }
+            _field "$(_alias_of "$2")" "$3";;
+  list)     # a top-level flow list. One reader for every such key, so a caller that needs
+            # party settings does not grow a second parser of this file — which is the
+            # duplication this script was ported to remove.
+            [ $# -eq 2 ] || { echo "usage: actor.sh list <key>" >&2; exit 2; }
+            _list "$2";;
   roster)   echo "party:      $PARTY"; echo "lanes:     $LANES"; echo "addressees:$NAMES"
             echo "aliases:   $(_section aliases | tr -d ' ' | tr '\n' ' ')";;
   --selftest) exec bash "$(cd "$(dirname "$0")/.." && pwd -P)/tests/bus-actor-selftest.sh";;

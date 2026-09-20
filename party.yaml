@@ -12,10 +12,13 @@ party:
   bus: ~/party-bus            # comms/ and queues/ live here
 
 brains:                       # each owns a queue lane and can be addressed
-  - { name: rabbot, role: voice,      class: cleric,       model: opus,   machine: local }
-  - { name: geist,  role: gate,       class: death-knight, model: fable,  machine: local }
-  - { name: page,   role: worker,     class: squire,       model: sonnet, machine: local }
-  - { name: augur,  role: researcher, class: oracle,       model: sonnet, machine: local }
+  # recycle_after = how many REAL ticks this brain may accrue before lifecycle/ticks.sh
+  # calls it due for a context recycle. A voice that answers in one line drifts slower
+  # than a gate that reads whole diffs, so the number is per-brain, not per-party.
+  - { name: rabbot, role: voice,      class: cleric,       model: opus,   machine: local, recycle_after: 12 }
+  - { name: geist,  role: gate,       class: death-knight, model: fable,  machine: local, recycle_after: 6 }
+  - { name: page,   role: worker,     class: squire,       model: sonnet, machine: local, recycle_after: 8 }
+  - { name: augur,  role: researcher, class: oracle,       model: sonnet, machine: local, recycle_after: 10 }
 
 familiars:                    # deterministic, no LLM, no lane
   - { name: watchman, role: watchman, every: 10m }
@@ -31,3 +34,10 @@ addressees: [teague]
 # an old name a sender still uses. A comm addressed to the alias reaches the brain.
 aliases:
   - { from: cleric, to: rabbot }
+
+# Where the launchers live. lifecycle/recycle.sh greps these for the flag name it is
+# about to write, so a flag no launcher consumes is caught at the call site instead of
+# blinding the restart path in silence. Globs, one per line; a dir that does not exist
+# is skipped. In a real party this list is where a brain living in another repo gets
+# added — that is the ONE line that changes, not the script.
+launchers: [~/party/launchers/start-*.sh]
