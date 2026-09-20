@@ -1,0 +1,33 @@
+# party.yaml — the roster. The ONE place names live.
+#
+# Everything under bus/ and lifecycle/ reads this file; no script carries its own
+# copy of who the party is. Point INNKEEPER_PARTY at another file to use another
+# roster (that is what the selftests do).
+#
+# The example below is a real four-brain party. Rename them; nothing keys on these
+# strings.
+
+party:
+  name: The Example Party
+  bus: ~/party-bus            # comms/ and queues/ live here
+
+brains:                       # each owns a queue lane and can be addressed
+  - { name: rabbot, role: voice,      class: cleric,       model: opus,   machine: local }
+  - { name: geist,  role: gate,       class: death-knight, model: fable,  machine: local }
+  - { name: page,   role: worker,     class: squire,       model: sonnet, machine: local }
+  - { name: augur,  role: researcher, class: oracle,       model: sonnet, machine: local }
+
+familiars:                    # deterministic, no LLM, no lane
+  - { name: watchman, role: watchman, every: 10m }
+  - { name: herald,   role: herald,   channel: stdout }
+
+# Names that may be ADDRESSED in a comm filename but own no queue lane: the human,
+# a brain on another meter, a retired name still appearing mid-run. Membership here
+# keeps the filename grammar parsing the whole run without ever creating a queue dir
+# nothing polls.
+addressees: [teague]
+
+# Alternate spellings that resolve to a roster name — a machine name, a class name,
+# an old name a sender still uses. A comm addressed to the alias reaches the brain.
+aliases:
+  - { from: cleric, to: rabbot }
