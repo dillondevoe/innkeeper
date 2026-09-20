@@ -1,0 +1,11 @@
+id: first-light
+title: Make the hello-party slice print one line from each brain
+brief: |
+  Four brains boot, each writes one line to the bus, the herald prints them in
+  roster order. No model calls. The point is the wiring, not the content.
+state: open
+lane: null
+created: 2026-09-20T14:07:29Z
+updated: 2026-09-20T14:07:29Z
+origin: geist-to-page-P2-first-light-2026-09-20.md
+blocked_on: []
