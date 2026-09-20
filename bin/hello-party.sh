@@ -1,21 +1,26 @@
 #!/usr/bin/env bash
-# hello-party.sh — the slice a stranger can run. Four brains boot, each writes ONE line
-# to the bus, the herald prints them in ROSTER order. No model calls, no network, no
-# state outside a sandbox this script creates and names.
+# hello-party.sh — ONE QUEST, END TO END, WATCHED. This is the product.
 #
-#   bin/hello-party.sh              run in a fresh sandbox, print where it was
-#   bin/hello-party.sh --keep       leave the sandbox on disk for inspection
+#   bin/hello-party.sh            run the quest in a fresh sandbox
+#   bin/hello-party.sh --keep     leave the sandbox on disk for inspection
 #
-# WHAT IT IS DEMONSTRATING, and it is not "four echo statements": every hop here is the
-# SHIPPED script, not a stand-in. The roster comes from bus/actor.sh, the quest record
-# from bus/quest.sh, dispatch from bus/enqueue.sh, delivery from staff/inbound.sh. If any
-# of those regresses, this demo breaks — which is the point of having it.
+# A stranger runs this and watches a party of four take a real job and finish it: a quest is
+# posted; a worker claims it under a lease; it produces a change; the GATE REFUSES IT ONCE,
+# with a reason; the worker reads the reason and fixes it; the gate passes; the result merges
+# exactly once; the voice tells the human. No model is called, nothing leaves the machine,
+# and everything happens inside a sandbox this script creates and removes.
 #
-# THE HERALD PRINTS IN ROSTER ORDER, NOT ARRIVAL ORDER, AND THAT IS THE LOAD-BEARING
-# CLAIM. Arrival order is whatever the filesystem hands back, and on a four-line run it
-# will usually MATCH roster order by luck — so the demo would look correct while proving
-# nothing. The brains are therefore made to speak in reverse roster order below. If the
-# herald ever starts echoing arrival order, the output visibly inverts.
+# WHY THE REFUSAL IS THE POINT. A demo where the work is right the first time proves only
+# that a happy path exists. The interesting claim -- the one that makes this a party and not
+# a script -- is that a wrong answer is CAUGHT and REPAIRED without a human in the loop. So
+# attempt 1 is wrong the way real work is wrong (see roles/worker.sh: it adds the flag and
+# forgets the value, so the tool exits 0 and prints an empty line), and the gate runs the
+# tool rather than reading its source, which is the only way to catch that.
+#
+# THE FAILURE OF THIS SCRIPT MUST NOT LOOK LIKE ITS SUCCESS. Its predecessor (now bin/smoke.sh)
+# printed a clean-looking party when a missing `tac` silently emptied the roster. So every step
+# below asserts its own outcome and exits non-zero, and the two that matter most -- the gate's
+# NO and the gate's later PASS -- are asserted to have HAPPENED, not merely to have been called.
 set -uo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
@@ -23,89 +28,146 @@ REPO=$(cd "$HERE/.." && pwd -P)
 ACTOR="$REPO/bus/actor.sh"
 KEEP=0; [ "${1:-}" = "--keep" ] && KEEP=1
 
+command -v git >/dev/null 2>&1 || { echo "FATAL: this quest works on a real git repo and git is not installed" >&2; exit 2; }
+
 SANDBOX=$(mktemp -d "${TMPDIR:-/tmp}/hello-party.XXXXXX") || { echo "cannot make a sandbox" >&2; exit 2; }
 [ "$KEEP" = 1 ] || trap 'rm -rf "$SANDBOX"' EXIT
 export INNKEEPER_BUS="$SANDBOX/bus"
 export INNKEEPER_HOME="$SANDBOX"
-# INNKEEPER_HOME moves the STATE dir into the sandbox, and it also moves where the roster
-# is looked for — the first run of this script died at "roster empty" for exactly that
-# reason. The roster is the one thing that must stay the repo's, so it is named outright.
 export INNKEEPER_PARTY="${INNKEEPER_PARTY:-$REPO/party.yaml}"
-mkdir -p "$INNKEEPER_BUS/comms" "$INNKEEPER_BUS/queues" "$SANDBOX/state" "$SANDBOX/quests"
 export INNKEEPER_QUESTS="$SANDBOX/quests"
+mkdir -p "$INNKEEPER_BUS/comms" "$INNKEEPER_BUS/queues" "$SANDBOX/state" "$SANDBOX/quests"
 
-say() { printf '\n\033[1m%s\033[0m\n' "$*"; }
+say()  { printf '\n\033[1m%s\033[0m\n' "$*"; }
+note() { printf '   %s\n' "$*"; }
+die()  { echo "FATAL: $*" >&2; exit 1; }
 
-# THE RC IS CONSUMED AT THE ASSIGNMENT. Same rule as bus/enqueue.sh: a helper that exits
-# inside $( ) exits the subshell only, and the caller runs on with an empty string.
-LANES=$(bash "$ACTOR" lanes) || { echo "FATAL: actor.sh refused to name the lanes" >&2; exit 2; }
-[ -n "$LANES" ] || { echo "FATAL: roster names no lanes — nothing can boot" >&2; exit 2; }
+# Names come from the roster, positionally. Nothing here types a party member's name --
+# party.yaml promises nothing keys on those strings, and bin/ is scanned for address grammar.
+LANES=$(bash "$ACTOR" lanes) || die "actor.sh refused to name the lanes"
+[ -n "$LANES" ] || die "the roster names no lanes -- nobody can take this quest"
+lane_of() { bash "$ACTOR" list lanes 2>/dev/null | grep -x -- "$1" >/dev/null && echo "$1"; }
+role_lane() { # role_lane <role> -> the lane whose ROLE field is this
+  local b; for b in $LANES; do
+    [ "$(bash "$ACTOR" field "$b" role 2>/dev/null)" = "$1" ] && { echo "$b"; return 0; }
+  done; return 1
+}
+W=$(role_lane worker)     || die "the roster has no worker -- nobody can do the work"
+G=$(role_lane gate)       || die "the roster has no gate -- nothing would be checked"
+V=$(role_lane voice)      || die "the roster has no voice -- nobody would tell you"
+R=$(role_lane researcher) || die "the roster has no researcher"
 
-say "1. The roster — read from party.yaml by bus/actor.sh, not by this script"
-printf '   %s\n' $LANES
+# ---------------------------------------------------------------- the work repo
+say "0. A tool that needs a version flag"
+TOY="$SANDBOX/work"; mkdir -p "$TOY"
+cat > "$TOY/tool.sh" <<'TOOL'
+#!/bin/sh
+# greet -- a very small tool.
+# ---ARGS---
+echo "hello, tavern"
+TOOL
+git -C "$TOY" init -q                          || die "could not init the work repo"
+git -C "$TOY" config user.email quest@innkeeper.local
+git -C "$TOY" config user.name  "The Party"
+# COMMIT SIGNING IS TURNED OFF *IN THIS SANDBOX REPO*, AND IT IS NOT A CONVENIENCE.
+# A fresh `git init` inherits the user's GLOBAL config, so on a machine with
+# `commit.gpgsign = true` the party's very first commit goes out to a signing agent --
+# and on the first Mac this ran on it died there ("No SSH private key found", rc 1) before
+# the quest had done anything at all. A demo that asks a stranger's signing key to
+# authorise commits it made in a temp directory is wrong even when it works. These are
+# repo-local settings inside the sandbox; the user's own git config is never read for
+# identity here and never written anywhere.
+git -C "$TOY" config commit.gpgsign false
+git -C "$TOY" config tag.gpgsign false
+git -C "$TOY" add -A >/dev/null && git -C "$TOY" commit -q -m "the tool, before the quest" \
+  || die "could not make the first commit"
+BASE=$(git -C "$TOY" rev-parse HEAD) || die "could not read the baseline commit"
+note "work repo: $TOY  (a real git repo, inside the sandbox)"
+note "today it answers: $(sh "$TOY/tool.sh")"
+# The line below used to say "<- nothing", and the run printed `[hello, tavern]` right
+# beside it: the tool has no argument handling at all, so it greets you whatever you ask
+# it. A caption that contradicts the output two characters to its left is the same defect
+# class as a gate that reads the diff -- it describes the work instead of reading it.
+note "and --version:   [$(sh "$TOY/tool.sh" --version 2>/dev/null)]  <- it ignores the flag entirely. That is the job."
 
-say "2. The quest — written by bus/quest.sh from the committed fixture brief"
-bash "$REPO/bus/quest.sh" new first-light \
-  --title "Make the hello-party slice print one line from each brain" \
-  --brief-file "$REPO/fixtures/quests/first-light.yaml" \
-  --origin "fixtures/quests/first-light.yaml" >/dev/null \
-  || { echo "FATAL: quest.sh refused to open the quest" >&2; exit 1; }
-bash "$REPO/bus/quest.sh" claim first-light worker >/dev/null \
-  || { echo "FATAL: quest.sh refused the claim" >&2; exit 1; }
-echo "   first-light: state=$(bash "$REPO/bus/quest.sh" field first-light state) lane=$(bash "$REPO/bus/quest.sh" field first-light lane)"
+# ---------------------------------------------------------------- the quest
+say "1. The quest is posted"
+QUEST=version-flag
+bash "$REPO/bus/quest.sh" new "$QUEST" \
+  --title "Add a --version flag to the tool and tell me when it is merged" \
+  --brief "The tool ignores every argument. Give it a --version flag that prints a real version number, and tell me when it is merged." \
+  --origin "bin/hello-party.sh" >/dev/null || die "quest.sh refused to open the quest"
+note "$QUEST: state=$(bash "$REPO/bus/quest.sh" field "$QUEST" state)"
 
-say "3. Four brains boot and each writes ONE line to the bus (reverse roster order)"
-today=$(date -u +%Y-%m-%d)
-# `tac` is GNU coreutils and is ABSENT on macOS, where the demo may well be driven from.
-# It failed there loudly (`tac: command not found`) and the demo carried on regardless --
-# see the step guard below. awk is POSIX and on every box that has a shell.
-REVERSED=$(printf '%s\n' $LANES | awk '{a[NR]=$0} END{for(i=NR;i>0;i--) print a[i]}') \
-  || { echo "FATAL: could not reverse the roster" >&2; exit 2; }
-# The rule four lines above -- THE RC IS CONSUMED AT THE ASSIGNMENT -- was stated here and
-# not applied here. When `tac` was missing on macOS, this assignment failed, REVERSED came
-# out empty, the `for` loop over it ran ZERO times, and the demo carried on to print
-# `enqueue: 0 marker(s) queued` and four empty delivery tiers with `(control:ok)`. A
-# stranger reading that output sees a quiet party, not a broken one: the failure rendered
-# as a legitimate-looking empty result, which is the only shape worth fearing on a stage.
-[ -n "$REVERSED" ] || { echo "FATAL: the reversed roster is empty" >&2; exit 2; }
-FIRST=$(printf '%s\n' $LANES | sed -n 1p)
-SECOND=$(printf '%s\n' $LANES | sed -n 2p)
-[ -n "$SECOND" ] || { echo "FATAL: a party of one cannot pass a message" >&2; exit 1; }
-for b in $REVERSED; do
-  role=$(bash "$ACTOR" field "$b" role 2>/dev/null || echo brain)
-  # NOBODY ADDRESSES THEMSELVES, AND NO NAME IS TYPED HERE. Everyone files to the first
-  # lane on the roster; that one files to the second. Two reasons it is positional:
-  # party.yaml promises "nothing keys on these strings" and a demo that hardcoded two of
-  # them would be the first thing to break that promise -- and bin/ is a directory the
-  # port gate scans for address grammar, so a literal roster name beside `-to-` is a
-  # FORBIDDEN hit. The gate caught this line; the roster is the only place names live.
-  to=$FIRST; [ "$b" = "$FIRST" ] && to=$SECOND
-  f="$INNKEEPER_BUS/comms/${b}-to-${to}-P2-first-light-line-${today}.md"
-  { echo "from: $b"; echo "to: $to"; echo "date: $(date -u +%Y-%m-%dT%H:%M:%SZ)"; echo
-    echo "$b here, the $role. One line, no model was called to write it."; } > "$f"
-  echo "   $b wrote $(basename "$f")"
-done
+say "2. A worker claims it -- under a lease, so a second one would stand down"
+LEASE="$REPO/lifecycle/lease.sh"
+claim=$(PARTY_BRAIN=$W bash "$LEASE" claim 2>&1) || die "the worker could not take a lease: $claim"
+case "$claim" in CLAIMED*) ;; *) die "expected a fresh lease, got: $claim";; esac
+note "lease: $claim"
+# THE SECOND CLAIMANT IS A SECOND INSTANCE OF THE SAME WORKER, NOT A DIFFERENT ROLE.
+# This step first asked the gate to claim and asserted it would be refused -- and it was
+# NOT, correctly: the lease is per-BRAIN lifecycle state, so every lane holds its own and
+# two different lanes claiming is exactly right. The run said so immediately. What the
+# lease actually prevents is the split brain -- the same seat running twice, which is the
+# failure the murder quest is built around.
+second=$(PARTY_BRAIN=$W bash "$LEASE" claim 2>&1) || true
+case "$second" in HELD-BY-OTHER*) note "a second instance of the same worker stands down: $second";;
+  *) die "the lease let a SECOND instance of one worker in: $second";; esac
+bash "$REPO/bus/quest.sh" claim "$QUEST" "$W" >/dev/null || die "quest.sh refused the claim"
+note "$QUEST: state=$(bash "$REPO/bus/quest.sh" field "$QUEST" state) lane=$(bash "$REPO/bus/quest.sh" field "$QUEST" lane)"
 
-say "4. Dispatch — bus/enqueue.sh scans the comms dir once and queues markers"
-bash "$REPO/bus/enqueue.sh" | sed 's/^/   /'
+say "3. The researcher reads the tool and briefs the worker"
+BRIEF="$SANDBOX/brief.txt"
+bash "$REPO/roles/researcher.sh" "$TOY" "$BRIEF" | sed 's/^/   /' || die "the researcher failed"
 
-say "5. Delivery — staff/inbound.sh, read as voice"
-PARTY_BRAIN=voice bash "$REPO/staff/inbound.sh" | sed 's/^/   /'
+say "4. The worker does the work -- attempt 1"
+sha1=$(bash "$REPO/roles/worker.sh" "$TOY" first) || die "the worker could not make attempt 1"
+note "commit $sha1: $(git -C "$TOY" log -1 --format=%s)"
 
-say "6. The herald speaks — ROSTER order, regardless of the order they spoke in"
-for b in $LANES; do
-  line=$(sed -n '5p' "$INNKEEPER_BUS"/comms/${b}-to-*-P2-first-light-line-${today}.md 2>/dev/null)
-  [ -n "$line" ] || { echo "   herald: $b filed nothing — the party is not whole" >&2; exit 1; }
-  printf '   %-8s %s\n' "$b" "$line"
-done
+say "5. The gate checks it -- by RUNNING the tool, not by reading the diff"
+REASON="$SANDBOX/refusal.txt"
+if bash "$REPO/roles/gate.sh" "$TOY" > "$REASON" 2>&1; then
+  cat "$REASON"
+  die "the gate PASSED attempt 1. It was supposed to be caught: the flag prints nothing."
+fi
+sed 's/^/   /' "$REASON"
+grep -q '^NO ' "$REASON" || die "the gate refused without saying NO -- a refusal nobody can read"
+note "-> REFUSED. This is the step the whole quest exists to show."
 
-# NO BACKTICKS IN A DOUBLE-QUOTED STRING. This line read ...refuses `done` while... and bash
-# EXECUTED it: the banner shipped as "refuses  while anything blocks it" and a stray error
-# printed two steps early. Prose about a shell keyword is still shell.
-say '7. The quest closes — quest.sh refuses the done state while anything blocks it'
-bash "$REPO/bus/quest.sh" state first-light done >/dev/null \
-  || { echo "FATAL: quest.sh refused to close the quest" >&2; exit 1; }
-echo "   first-light: state=$(bash "$REPO/bus/quest.sh" field first-light state)"
+say "6. The worker reads the refusal and fixes it -- attempt 2"
+sha2=$(bash "$REPO/roles/worker.sh" "$TOY" fix "$REASON") || die "the worker could not repair it"
+[ "$sha2" != "$sha1" ] || die "attempt 2 produced no new commit"
+note "commit $sha2: $(git -C "$TOY" log -1 --format=%s)"
 
-say "hello-party complete."
+say "7. The gate checks again"
+PASSOUT="$SANDBOX/pass.txt"
+bash "$REPO/roles/gate.sh" "$TOY" > "$PASSOUT" 2>&1 || { sed 's/^/   /' "$PASSOUT"; die "the gate refused the repair too"; }
+sed 's/^/   /' "$PASSOUT"
+grep -q '^PASS ' "$PASSOUT" || die "the gate exited 0 without saying PASS"
+
+say "8. The result merges -- exactly once"
+att=$(bash "$REPO/bus/merge.sh" begin "$QUEST" "$W") || die "merge.sh refused to stage an attempt"
+dir=${att#ATTEMPT }
+[ -d "$dir" ] || die "merge.sh named a staging dir that does not exist: $dir"
+{ echo "quest: $QUEST"; echo "commit: $sha2"; echo "version: $(sh "$TOY/tool.sh" --version)"; } > "$dir/result.txt"
+m1=$(bash "$REPO/bus/merge.sh" commit "$QUEST" "$W" "$dir/result.txt") || die "the merge refused"
+note "$m1"
+case "$m1" in MERGED*) ;; *) die "expected MERGED, got: $m1";; esac
+# The exactly-once claim is ASSERTED, not assumed: a second commit must be refused.
+att2=$(bash "$REPO/bus/merge.sh" begin "$QUEST" "$G") || die "merge.sh refused a second staging"
+dir2=${att2#ATTEMPT }
+cp "$dir/result.txt" "$dir2/result.txt" 2>/dev/null || echo x > "$dir2/result.txt"
+m2=$(bash "$REPO/bus/merge.sh" commit "$QUEST" "$G" "$dir2/result.txt") || true
+case "$m2" in ALREADY-MERGED*) note "a second merge is refused: $m2";;
+  *) die "the result merged TWICE: $m2";; esac
+DEST=$(bash "$REPO/bus/merge.sh" dest "$QUEST")
+
+say "9. The quest closes"
+bash "$REPO/bus/quest.sh" state "$QUEST" done >/dev/null || die "quest.sh refused to close the quest"
+note "$QUEST: state=$(bash "$REPO/bus/quest.sh" field "$QUEST" state)"
+PARTY_BRAIN=$W bash "$LEASE" release >/dev/null 2>&1 || true
+
+say "10. The voice tells you"
+bash "$REPO/roles/voice.sh" "$QUEST" "$TOY" "$DEST" "$BASE" || die "the voice failed"
+
 [ "$KEEP" = 1 ] && echo "sandbox kept at $SANDBOX" || echo "(sandbox removed; --keep to inspect it)"

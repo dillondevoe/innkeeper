@@ -2,18 +2,34 @@
 
 > Turn your laptop into a tavern for Claude Code agents. Give the party a quest, watch it ship, and make camp.
 
-## Run the first quest
+## Watch a quest finish
 
 ```sh
 git clone <this repo> && cd innkeeper
 bin/hello-party.sh
 ```
 
-Four brains boot, each writes one line to the bus, and the herald prints them in roster
-order. No model is called, nothing leaves the machine, and the sandbox it builds is
-removed on exit (`--keep` to inspect it). Every hop is the real script — the roster from
+A party of four takes one job and finishes it, in a sandbox, in about a second: a quest is
+posted; a worker claims it under a lease (a second instance of that worker stands down); a
+researcher reads the tool and briefs the worker; the worker adds a `--version` flag to a
+real tool in a real git repo; **the gate refuses it** — the flag exits 0 and prints nothing
+— the worker reads the refusal and fixes it; the gate passes; the result merges exactly
+once, and a second merge is refused; the voice tells you what happened.
+
+No model is called, nothing leaves the machine, nothing outside the sandbox is written, and
+the sandbox is removed on exit (`--keep` to inspect it). The refusal is not decoration: with
+the worker's first attempt made correct, the run FAILS rather than passing quietly, and
+`tests/bin-hello-party-selftest.sh` asserts exactly that.
+
+```sh
+bin/smoke.sh
+```
+
+is the older, smaller thing: four brains boot, each writes one line to the bus, and the
+herald prints them in roster order. Nothing is worked on, refused or merged — it is the
+WIRING proof, and it stays because every hop in it is the real script (the roster from
 `bus/actor.sh`, the quest record from `bus/quest.sh`, dispatch from `bus/enqueue.sh`,
-delivery from `staff/inbound.sh` — so when the demo works, the wiring works.
+delivery from `staff/inbound.sh`), so when it breaks, something real broke.
 
 Record shapes are in [SCHEMA.md](SCHEMA.md). Every script here is paired with a battery
 under `tests/`. Run them all, and get one verdict with an exit code:
@@ -30,7 +46,15 @@ The port gate's battery needs [gitleaks](https://github.com/gitleaks/gitleaks) o
 rather than a verdict, because every one of its arms asserts a real scan result. **A CANNOT-RUN
 fails the suite** (`run-all.sh` exits non-zero), the same as a RED: a battery that could not run
 is not a battery that passed, and the fresh-clone default on a machine without gitleaks is
-therefore 15/16 and rc=1 until you install it.
+therefore 16/17 and rc=1 until you install it.
+
+**Run the suite once at a time.** Two concurrent `run-all.sh` runs produce reds that neither
+run produces alone: measured on one host, `bin-murder-quest`, `bus-merge` and
+`bin-hello-party` each went red in 3 of 6 paired runs, while `bin-murder-quest` alone was
+20/20 green and 12/12 green against a second copy of itself. The batteries share
+repo-level state (`state/`), so a second suite is not another observer — it is another
+writer. Isolating them is open work; until then a red from a machine running two suites at
+once is a fact about the machine.
 
 One battery is not a battery at all: `tests/portability-selftest.sh` greps the shell sources
 for GNU-only constructs (`tac`, `sed -i`, `$BASHPID`, BRE `\|`, `grep -P`, `readlink -f`,

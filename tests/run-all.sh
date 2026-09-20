@@ -20,7 +20,7 @@
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd -P)
 DIR=${INNKEEPER_TESTS_DIR:-$HERE}
-EXPECT_BATTERIES=${INNKEEPER_EXPECT_BATTERIES:-16}
+EXPECT_BATTERIES=${INNKEEPER_EXPECT_BATTERIES:-17}
 
 # This runner's OWN battery matches the glob, and running it from here would recurse. It is
 # excluded by exact name and the exclusion is PRINTED, not silent: an exclusion nobody can see

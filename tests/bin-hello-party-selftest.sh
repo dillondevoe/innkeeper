@@ -1,76 +1,56 @@
 #!/usr/bin/env bash
-# bin-hello-party-selftest.sh — battery for bin/hello-party.sh, the slice-1 demo.
+# bin-hello-party-selftest.sh — the quest ran, and the INTERESTING parts of it happened.
 #
-# A demo script is the one thing in this repo a stranger runs FIRST, so its failure mode
-# is "the product looks broken." That makes it worth arms, and the arms have to be about
-# the CLAIMS the banner makes, not merely about rc=0 -- a script that printed nothing at
-# all would exit 0 just as happily.
+# A battery that only checked rc 0 would pass on a quest where the gate never refused, the
+# worker never repaired anything, and the result merged twice -- which is precisely the
+# hollow-demo failure this script was built to replace. So every arm below asserts a VERB
+# in the transcript, and D1/D2 are the controls: with the gate's refusal defeated, the run
+# must FAIL rather than quietly succeed.
 set -uo pipefail
-R=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
-# HELLO_IMPL must sit in a directory whose PARENT holds bus/ and party.yaml: the script
-# derives REPO from its own path. A mutant dropped in a bare temp dir dies at "actor.sh
-# refused to name the lanes" and every arm reds out identically, which is indistinguishable
-# from the mutation being caught. Symlink a tree; do not copy the file somewhere flat.
-IMPL="${HELLO_IMPL:-$R/bin/hello-party.sh}"
-EXPECT_ARMS=14
-n=0; pass=0
-ok(){ n=$((n+1)); pass=$((pass+1)); }
-bad(){ n=$((n+1)); echo "FAIL $1"; }
-chk(){ if [ "$2" = "$3" ]; then ok; else bad "$1: got [$2] want [$3]"; fi; }
+HERE=$(cd "$(dirname "$0")" && pwd -P); R=$(cd "$HERE/.." && pwd -P)
+arms=0; fails=0
+EXPECT_ARMS=${INNKEEPER_EXPECT_HP_ARMS:-13}
+ok()  { arms=$((arms+1)); echo "  $1 — PASS"; }
+bad() { arms=$((arms+1)); fails=$((fails+1)); echo "  $1 — FAIL${2:+ :: $2}"; }
+arm() { # arm <name> <haystack> <ERE>
+  arms=$((arms+1))
+  if printf '%s\n' "$2" | grep -Eq -- "$3"; then echo "  $1 — PASS"
+  else fails=$((fails+1)); echo "  $1 — FAIL :: wanted /$3/"; fi
+}
 
-W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
-bash "$IMPL" >"$W/out" 2>"$W/err"; RC=$?
-O=$W/out
+command -v git >/dev/null 2>&1 || { echo "CANNOT-RUN: git is not installed, and this quest commits to a real repo"; exit 2; }
 
-chk H1-rc "$RC" 0
-chk H2-err-empty "$(wc -c <"$W/err" | tr -d ' ')" 0
-chk H3-completed "$(command grep -c 'hello-party complete' "$O")" 1
+OUT=$(bash "$R/bin/hello-party.sh" 2>&1); RC=$?
+[ "$RC" = 0 ] && ok "A0 the quest exits 0" || bad "A0 the quest exits 0" "rc=$RC"
 
-# --- the roster is READ, not hardcoded ---------------------------------------------------
-LANES=$(bash "$R/bus/actor.sh" lanes)
-# ONE ARM, NOT ONE PER BRAIN. This was a `bad` inside the loop plus an unconditional `ok`
-# after it, so every missing brain added an arm: a failing run reported 18 arms against an
-# expected 14 and tripped ARM COUNT DRIFT, whose message then buried the real failures. An
-# arm whose COUNT depends on the outcome cannot be reconciled against a fixed expectation.
-missing=
-for b in $LANES; do
-  [ "$(command grep -c "^   $b " "$O")" -ge 1 ] || missing="$missing $b"
-done
-if [ -z "$missing" ]; then ok; else bad "H4-every-lane-heralded: missing$missing"; fi
+arm A1-quest-posted        "$OUT" 'state=open'
+arm A2-lease-claimed       "$OUT" 'lease: CLAIMED'
+arm A3-second-instance-refused "$OUT" 'HELD-BY-OTHER'
+arm A4-gate-REFUSED-once   "$OUT" 'NO .*printed NOTHING'
+arm A5-refusal-announced   "$OUT" 'REFUSED\. This is the step'
+arm A6-worker-repaired     "$OUT" 'gate refused: it printed nothing'
+arm A7-gate-passed-after   "$OUT" 'PASS .*prints: [0-9]+\.[0-9]+'
+arm A8-merged-once         "$OUT" '^   MERGED '
+arm A9-second-merge-refused "$OUT" 'ALREADY-MERGED'
+arm A10-voice-spoke        "$OUT" 'The party made 2 commits to get there'
 
-# --- ORDER. The load-bearing arm, and it needs BOTH halves ------------------------------
-# The herald block is step 6. Pull the names it printed, in the order it printed them.
-heard=$(sed -n '/6\. The herald speaks/,/^$/p' "$O" | sed -n 's/^   \([a-z][a-z-]*\)  *.*/\1/p' | tr '\n' ' ')
-roster=$(printf '%s ' $LANES)
-# `tac` is GNU-only, same as the one the demo itself used. Missing it here made `arrival`
-# EMPTY, so H6 compared roster against "" and passed, and H7 reported a want of []. The
-# control arm was the thing that broke, and it broke into a pass.
-arrival=$(printf '%s\n' $LANES | awk '{a[NR]=$0} END{for(i=NR;i>0;i--) print a[i]}' | tr '\n' ' ')
-[ -n "${arrival// /}" ] || { echo "CANNOT-RUN hello-party-selftest: could not build the arrival order" >&2; exit 3; }
-chk H5-herald-is-roster-order "$heard" "$roster"
-# THE CONTROL. H5 alone passes if roster order and arrival order happen to coincide -- on
-# a four-name roster they would, for any demo that just echoed the directory back. This
-# asserts the two orders are ACTUALLY DIFFERENT in this fixture, so H5 discriminates.
-if [ "$roster" = "$arrival" ]; then bad "H6-orders-are-distinguishable: the fixture cannot tell roster from arrival"; else ok; fi
-# And the brains really did speak in the other order, so H5 is not passing by accident.
-spoke=$(sed -n '/3\. Four brains boot/,/^$/p' "$O" | sed -n 's/^   \([a-z][a-z-]*\) wrote .*/\1/p' | tr '\n' ' ')
-chk H7-spoke-in-arrival-order "$spoke" "$arrival"
+# D1/D2 -- CONTROLS. Defeat the defect the gate exists to catch: make attempt 1 already
+# correct. The gate then passes on the first try, and the run MUST die at step 5 rather
+# than sail through. Without this, every arm above could be satisfied by a script that
+# prints the right words in the right order.
+MUT=$(mktemp -d); cp -R "$R"/. "$MUT"/ 2>/dev/null
+sed 's/echo \\"\$VERSION\\"/echo \\"0.9.9\\"/' "$R/roles/worker.sh" > "$MUT/roles/worker.sh"
+MOUT=$(bash "$MUT/bin/hello-party.sh" 2>&1); MRC=$?
+[ "$MRC" != 0 ] && ok "D1 CONTROL a first-try-correct worker FAILS the run" \
+                || bad "D1 CONTROL a first-try-correct worker FAILS the run" "rc=$MRC"
+printf '%s\n' "$MOUT" | grep -q 'gate PASSED attempt 1' \
+  && ok "D2 CONTROL and it says WHY it failed" \
+  || bad "D2 CONTROL and it says WHY it failed" "$(printf '%s\n' "$MOUT" | tail -1)"
+rm -rf "$MUT"
 
-# --- the wiring each step claims ---------------------------------------------------------
-chk H8-quest-claimed  "$(command grep -c 'state=claimed lane=worker' "$O")" 1
-chk H9-quest-done     "$(command grep -c 'state=done' "$O")" 1
-nq=$(sed -n 's/.*enqueue: \([0-9]*\) marker.*/\1/p' "$O")
-chk H10-one-marker-per-brain "$nq" "$(printf '%s\n' $LANES | wc -l | tr -d ' ')"
-chk H11-inbound-acted "$(sed -n 's/.*--- act:\([0-9]*\) .*/\1/p' "$O")" 3
-chk H12-no-unroutable "$(sed -n 's/.*unroutable:\([0-9]*\) .*/\1/p' "$O")" 0
-
-# --- it must not leave anything behind, and --keep must ----------------------------------
-sb=$(sed -n 's/.*sandbox kept at //p' "$O")
-chk H13-default-run-keeps-nothing "$sb" ""
-bash "$IMPL" --keep >"$W/out2" 2>/dev/null
-kept=$(sed -n 's/.*sandbox kept at //p' "$W/out2")
-if [ -n "$kept" ] && [ -d "$kept" ]; then ok; rm -rf "$kept"; else bad "H14-keep-leaves-the-sandbox"; fi
-
-echo "bin-hello-party-selftest: $pass/$n passed (expected $EXPECT_ARMS arms)"
-[ "$n" = "$EXPECT_ARMS" ] || { echo "ARM COUNT DRIFT: ran $n, expected $EXPECT_ARMS"; exit 1; }
-[ "$pass" = "$n" ]
+if [ "$arms" -ne "$EXPECT_ARMS" ]; then
+  echo "ARM COUNT: ran $arms, expected $EXPECT_ARMS — an arm was skipped or added."
+  fails=$((fails+1))
+fi
+echo "bin-hello-party-selftest: $((arms-fails))/$arms passed (expected $EXPECT_ARMS arms)"
+[ "$fails" = 0 ]
