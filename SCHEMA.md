@@ -5,7 +5,7 @@ finished, so a consumer (a live tavern view, a replay harness) can be built agai
 stated shape instead of against a running system.
 
 **These three records are NOT in the same state, and the difference is the most useful
-thing on this page.** The bus message and the lease record are *read off shipped code* —
+thing on this worker.** The bus message and the lease record are *read off shipped code* —
 `bus/enqueue.sh` and `lifecycle/lease.sh` write exactly these bytes today, and the field
 lists below were derived from the write sites, not from memory. As of the hello-party slice the quest record is read off
 shipped code too: `bus/quest.sh` writes exactly these bytes, and `tests/bus-quest-selftest.sh`
@@ -57,7 +57,7 @@ state: open
 lane: null
 created: 2026-09-20T14:07:29Z
 updated: 2026-09-20T14:07:29Z
-origin: geist-to-page-P2-first-light-2026-09-20.md
+origin: gate-to-worker-P2-first-light-2026-01-01.md
 blocked_on: []
 ```
 
@@ -72,7 +72,7 @@ A bus message is a **marker**, not a message. It carries no payload:
 | part | type | notes |
 |---|---|---|
 | path segment `<lane>` | roster brain name | The routing. Resolved by `bus/actor.sh targets`, never re-parsed by a consumer. |
-| filename stem | the comm's full basename incl. `.md` | e.g. `page-to-geist-P2-a-question-2026-09-20.md.job` |
+| filename stem | the comm's full basename incl. `.md` | e.g. `worker-to-gate-P2-a-question-2026-09-20.md.job` |
 | file body | integer, starts `0` | Delivery **attempt counter**. Not a status, not a timestamp. |
 
 **The name is the entire message and the body is the retry state.** A consumer that wants

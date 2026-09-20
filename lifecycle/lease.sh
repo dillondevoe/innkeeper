@@ -60,13 +60,37 @@ BOOT=$(boot_epoch)
 # a dead holder's lane too long blocks a relaunch -- visible, and recoverable by waiting or by the
 # boot check. Expiring a LIVE holder's lane hands two workers the same task and corrupts quietly.
 # When a clock is uncertain, the safe error is to keep the lane held.
+#
+# NO AWAKE CLOCK IS KNOWN FOR DARWIN YET, AND THE OBVIOUS CANDIDATE IS WORSE THAN NOTHING.
+# `python3 -c 'import time; print(int(time.monotonic()))'` returns **0** on macOS 26, which this
+# code would store and later read as "awake for zero seconds" -- so every lease would compute
+# age 0 and NEVER go stale. That is the absent-is-not-zero collapse above, arriving through the
+# fix for it. Measured on a macOS host: CLOCK_MONOTONIC equals wall-seconds-since-kern.boottime exactly
+# (2672134 both), so it counts sleep and is just a wall clock; CLOCK_UPTIME_RAW read 12s HIGHER
+# than that, which no sleep-excluding clock can do. Neither is a candidate, and neither test
+# discriminates anyway on a machine that has not slept: the question can only be settled by
+# reading a clock before and after a real suspend. Until someone does, Darwin has no awake clock
+# here and SAYS SO -- see awake_clock_note() below. A stated limit is shippable; a silent one is
+# not, and a guessed one is the bug wearing the fix's clothes.
 awake_seconds() {
   local a="${LEASE_AWAKE_S:-}"
   [ -n "$a" ] && { echo "$a"; return; }
-  a=$(awk '{print int($1)}' /proc/uptime 2>/dev/null) || a=""
+  # The path is a variable so a test can reproduce a host WITHOUT an awake clock by pointing it
+  # at one that does not exist -- travelling this exact branch rather than asserting the verdict
+  # it is supposed to produce. LEASE_AWAKE_S= (empty) does NOT do that: it falls straight through
+  # to here and finds Linux's real /proc/uptime, so an arm written that way passes on macOS and
+  # is vacuous on Linux, which is the substrate asymmetry this whole file just paid for.
+  a=$(awk '{print int($1)}' "${LEASE_UPTIME_FILE:-/proc/uptime}" 2>/dev/null) || a=""
   echo "$a"   # empty means NO AWAKE CLOCK ON THIS HOST -- not "zero seconds awake"
 }
 AWAKE=$(awake_seconds)
+
+# The limit, said out loud wherever a verdict is printed. Empty when the host HAS an awake clock,
+# so it costs nothing on Linux and cannot be mistaken for a warning about something else.
+awake_clock_note() {
+  [ -n "$AWAKE" ] && return
+  printf ' [no awake clock on this host: it cannot tell sleep from death, so leases age on the WALL clock and a suspended holder loses its lane]'
+}
 
 new_nonce() {
   # SCHEMA.md specifies the nonce as lowercase hex, and two of these three sources emit it
@@ -131,7 +155,7 @@ case "${1:-}" in
     existing=$(read_lock)
     if [ -n "$existing" ]; then
       lock_fields "$existing"
-      if ! lock_is_stale; then echo "HELD-BY-OTHER age=$age"; exit 0; fi
+      if ! lock_is_stale; then echo "HELD-BY-OTHER age=$age$(awake_clock_note)"; exit 0; fi
     fi
     n=$(new_nonce); write_lock "$n"; echo "CLAIMED $n" ;;
   renew|release)
@@ -147,9 +171,9 @@ case "${1:-}" in
     lock_fields "$existing"
     if lock_is_stale; then
       prev=""; [ "$lboot" != 0 ] && [ "$lboot" != "$BOOT" ] && prev=" (previous boot)"
-      echo "STALE age=$age nonce=$nonce$prev"
+      echo "STALE age=$age nonce=$nonce$prev$(awake_clock_note)"
     else
-      echo "HELD age=$age nonce=$nonce"
+      echo "HELD age=$age nonce=$nonce$(awake_clock_note)"
     fi ;;
   *) echo "usage: lease.sh claim|renew <nonce>|release <nonce>|status" >&2; exit 2 ;;
 esac

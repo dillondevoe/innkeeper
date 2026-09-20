@@ -33,12 +33,12 @@ has() { [ -f "$Q/$1.yaml" ] && echo yes || echo no; }
 fld() { run field "$1" "$2"; out; }
 
 # --- creation --------------------------------------------------------------------------
-run new hello --title "Say one line each" --brief "Four boot, four lines, one order." --origin geist-to-page-P2-x-2026-09-20.md
+run new hello --title "Say one line each" --brief "Four boot, four lines, one order." --origin gate-to-worker-P2-x-2026-09-20.md
 chk A1-new-rc          "$RC" 0
 chk A1b-new-file       "$(has hello)" yes
 chk A2-state-open      "$(fld hello state)" open
 chk A2b-lane-null      "$(fld hello lane)" null
-chk A2c-origin-kept    "$(fld hello origin)" "geist-to-page-P2-x-2026-09-20.md"
+chk A2c-origin-kept    "$(fld hello origin)" "gate-to-worker-P2-x-2026-09-20.md"
 chk A2d-deps-empty     "$(fld hello blocked_on)" ""
 # The stamps are MACHINE-WRITTEN and there is no flag to supply one. Assert the SHAPE, which
 # is the only thing a test can assert about a value it must not be able to control.
@@ -97,7 +97,7 @@ chk B1-typo-lane-rc      "$RC" 1
 case "$(err)" in *"owns no queue lane"*) ok;; *) bad "B1d-typo-names-the-reason";; esac
 chk B1b-typo-lane-state  "$(fld hello state)" open
 chk B1c-typo-lane-lane   "$(fld hello lane)" null
-# A NON-LANE ROSTER NAME. `teague` is an addressee — a real, resolvable name that owns no
+# A NON-LANE ROSTER NAME. `patron` is an addressee — a real, resolvable name that owns no
 # queue. Without this arm B1 passes on a check that merely spell-checks, and the sentinel
 # case SCHEMA.md §1 warns about walks straight through.
 # ON ITS OWN QUEST, NOT `hello`. This arm used to reuse `hello`, and a mutation that
@@ -106,26 +106,26 @@ chk B1c-typo-lane-lane   "$(fld hello lane)" null
 # to catch: an earlier guard shadowing the branch under test. A fresh, unclaimed quest is
 # what makes the refusal attributable, and B2c makes it say which refusal fired.
 run new b2-probe --title X --brief y
-run claim b2-probe teague
+run claim b2-probe patron
 chk B2-addressee-refused "$RC" 1
 case "$(err)" in *"owns no queue lane"*) ok;; *) bad "B2c-addressee-names-the-reason";; esac
 chk B2b-addressee-lane   "$(fld b2-probe lane)" null
 # THE PERMITTING TWINS.
-run claim hello page
+run claim hello worker
 chk B3-claim-rc          "$RC" 0
 chk B3b-claim-state      "$(fld hello state)" claimed
-chk B3c-claim-lane       "$(fld hello lane)" page
+chk B3c-claim-lane       "$(fld hello lane)" worker
 # An ALIAS resolves to the roster name it addresses, and the record stores the resolved one.
 run claim hello-two cleric
 chk B4-alias-rc          "$RC" 0
-chk B4b-alias-stored-resolved "$(fld hello-two lane)" rabbot
+chk B4b-alias-stored-resolved "$(fld hello-two lane)" voice
 # Idempotent: re-asserting your own hold is state, not an event.
-run claim hello page
+run claim hello worker
 chk B5-reclaim-rc        "$RC" 0
 case "$(out)" in *already*) ok;; *) bad "B5b-reclaim-says-already";; esac
-run claim hello augur
+run claim hello researcher
 chk B6-steal-refused     "$RC" 1
-chk B6b-steal-lane-kept  "$(fld hello lane)" page
+chk B6b-steal-lane-kept  "$(fld hello lane)" worker
 
 # --- the state/lane coupling --------------------------------------------------------------
 run state hello claimed

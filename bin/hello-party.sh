@@ -50,7 +50,7 @@ bash "$REPO/bus/quest.sh" new first-light \
   --brief-file "$REPO/fixtures/quests/first-light.yaml" \
   --origin "fixtures/quests/first-light.yaml" >/dev/null \
   || { echo "FATAL: quest.sh refused to open the quest" >&2; exit 1; }
-bash "$REPO/bus/quest.sh" claim first-light page >/dev/null \
+bash "$REPO/bus/quest.sh" claim first-light worker >/dev/null \
   || { echo "FATAL: quest.sh refused the claim" >&2; exit 1; }
 echo "   first-light: state=$(bash "$REPO/bus/quest.sh" field first-light state) lane=$(bash "$REPO/bus/quest.sh" field first-light lane)"
 
@@ -89,8 +89,8 @@ done
 say "4. Dispatch — bus/enqueue.sh scans the comms dir once and queues markers"
 bash "$REPO/bus/enqueue.sh" | sed 's/^/   /'
 
-say "5. Delivery — staff/inbound.sh, read as rabbot"
-PARTY_BRAIN=rabbot bash "$REPO/staff/inbound.sh" | sed 's/^/   /'
+say "5. Delivery — staff/inbound.sh, read as voice"
+PARTY_BRAIN=voice bash "$REPO/staff/inbound.sh" | sed 's/^/   /'
 
 say "6. The herald speaks — ROSTER order, regardless of the order they spoke in"
 for b in $LANES; do

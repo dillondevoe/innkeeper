@@ -57,7 +57,7 @@ spoke=$(sed -n '/3\. Four brains boot/,/^$/p' "$O" | sed -n 's/^   \([a-z][a-z-]
 chk H7-spoke-in-arrival-order "$spoke" "$arrival"
 
 # --- the wiring each step claims ---------------------------------------------------------
-chk H8-quest-claimed  "$(command grep -c 'state=claimed lane=page' "$O")" 1
+chk H8-quest-claimed  "$(command grep -c 'state=claimed lane=worker' "$O")" 1
 chk H9-quest-done     "$(command grep -c 'state=done' "$O")" 1
 nq=$(sed -n 's/.*enqueue: \([0-9]*\) marker.*/\1/p' "$O")
 chk H10-one-marker-per-brain "$nq" "$(printf '%s\n' $LANES | wc -l | tr -d ' ')"

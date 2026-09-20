@@ -45,14 +45,14 @@ chmod +x "$MUX"
 
 cat > "$WORK/party.yaml" <<PY
 brains:
-  - {name: geist,  lane: gate,  recycle_after: 6}
-  - {name: rabbot, lane: voice, recycle_after: 12}
+  - {name: gate,  lane: gate,  recycle_after: 6}
+  - {name: voice, lane: voice, recycle_after: 12}
 # An alias is its own section with from:/to: — NOT an inline alias: field on the row. The
 # first cut of this fixture used the inline spelling; actor.sh never reads it, so resolve
 # returned the token unchanged and B8 failed. The fixture, not the code: a fixture that
 # spells the roster in a second dialect is the same defect the port exists to remove.
 aliases:
-  - {from: cleric, to: rabbot}
+  - {from: cleric, to: voice}
 launchers: [$WORK/launchers/start-*.sh]
 PY
 
@@ -68,19 +68,19 @@ flags() { ls "$ST/state" 2>/dev/null | command grep -c '^recycle-.*\.flag$'; }
 # ---- 1. The multiplexer gate (step 1) --------------------------------------------------
 ST="$WORK/home"; rm -rf "$ST"; mkdir -p "$ST/state"
 OUT=$(INNKEEPER_PARTY="$WORK/party.yaml" INNKEEPER_HOME="$ST" INNKEEPER_MUX="$WORK/nope" \
-      bash "$IMPL" geist s1 2>&1); RC=$?
+      bash "$IMPL" gate s1 2>&1); RC=$?
 arm B1-no-mux-fails            3 "$RC" '*no multiplexer*' "$OUT"
 arm B1b-no-mux-writes-no-flag  - 0 '0' "$(flags)"
 # The twin: identical call, mux present. Without it, B1b is green for a script that exits
 # at line 1 — "no flag written" is also what a broken script produces.
 rm -f "$WORK/rc.has-session" "$WORK/rc.send-keys"
-run geist s1
+run gate s1
 arm B1c-twin-mux-present-ok    0 "$RC" '*OK*exit queued*' "$OUT"
 arm B1d-twin-writes-the-flag   - 0 '1' "$(flags)"
 
 # ---- 2. The session gate (step 2) ------------------------------------------------------
 echo 1 > "$WORK/rc.has-session"
-run geist ghost
+run gate ghost
 arm B2-no-session-fails        4 "$RC" "*session 'ghost' not found*" "$OUT"
 arm B2b-no-session-no-flag     - 0 '0' "$(flags)"
 arm B2c-no-session-no-send     - 0 '0' "$(command grep -c '^send-keys' "$WORK/mux.calls" 2>/dev/null || true)"
@@ -89,7 +89,7 @@ rm -f "$WORK/rc.has-session"
 # ---- 3. The rollback (step 6) ----------------------------------------------------------
 # The arm the whole write-ahead order exists for: the exit failed, so the flag must be gone.
 echo 1 > "$WORK/rc.send-keys"
-run geist s1
+run gate s1
 arm B3-send-fail-rc            5 "$RC" '*flag removed*' "$OUT"
 arm B3b-send-fail-rolls-back   - 0 '0' "$(flags)"
 arm B3c-send-fail-counter-kept - 0 '' "$(ls "$ST/state/ticks" 2>/dev/null)"   # step 7 never ran
@@ -98,34 +98,34 @@ rm -f "$WORK/rc.send-keys"
 # ---- 4. The compaction flag (step 4) ---------------------------------------------------
 ST="$WORK/home"; rm -rf "$ST"; mkdir -p "$ST/state"; : > "$ST/state/compacted-s1.flag"
 OUT=$(INNKEEPER_PARTY="$WORK/party.yaml" INNKEEPER_HOME="$ST" INNKEEPER_MUX="$MUX" \
-      INNKEEPER_CONFIRM_DEADLINE=1 TICKS_DIR="$ST/state/ticks" bash "$IMPL" geist s1 2>&1); RC=$?
+      INNKEEPER_CONFIRM_DEADLINE=1 TICKS_DIR="$ST/state/ticks" bash "$IMPL" gate s1 2>&1); RC=$?
 arm B4-compaction-flag-cleared - 0 '0' "$(ls "$ST/state" | command grep -c '^compacted-')"
 arm B4b-and-recycle-flag-set   - 0 '1' "$(flags)"
 
 # ---- 5. The launcher WARN (step 3) -----------------------------------------------------
 rm -f "$WORK/launchers"/*.sh
-run geist s1
+run gate s1
 arm B5-no-launcher-warns       0 "$RC" '*WARN*no launcher consumes*' "$OUT"
 arm B5b-warn-still-writes      - 0 '1' "$(flags)"          # WARN, not FAIL: the flag is written
-printf 'exec: rm -f state/recycle-geist.flag\n' > "$WORK/launchers/start-geist.sh"
-run geist s1
+printf 'exec: rm -f state/recycle-gate.flag\n' > "$WORK/launchers/start-gate.sh"
+run gate s1
 arm B6-consumed-no-warn        0 "$RC" '*' "$OUT"
 case "$OUT" in *"no launcher consumes"*) echo "FAIL B6b-consumed-silent: warned anyway";; *) pass=$((pass+1));; esac; n=$((n+1))
 # THE COMMENT ARM. A launcher whose only mention of the flag is prose warning against it
 # satisfies a naive grep with the exact wrong name — the fail-open that looks like a pass.
-printf '# do NOT use state/recycle-geist.flag here\nexec: true\n' > "$WORK/launchers/start-geist.sh"
-run geist s1
+printf '# do NOT use state/recycle-gate.flag here\nexec: true\n' > "$WORK/launchers/start-gate.sh"
+run gate s1
 arm B7-comment-only-still-warns 0 "$RC" '*WARN*no launcher consumes*' "$OUT"
 
 # ---- 6. Alias resolution — one brain, one flag ------------------------------------------
-printf 'exec: rm -f state/recycle-rabbot.flag\n' > "$WORK/launchers/start-rabbot.sh"
+printf 'exec: rm -f state/recycle-voice.flag\n' > "$WORK/launchers/start-voice.sh"
 run cleric s1
-arm B8-alias-flag-is-canonical - 0 'recycle-rabbot.flag' "$(ls "$ST/state" | command grep '^recycle-')"
+arm B8-alias-flag-is-canonical - 0 'recycle-voice.flag' "$(ls "$ST/state" | command grep '^recycle-')"
 arm B8b-alias-no-warn          0 "$RC" '*' "$OUT"
 case "$OUT" in *"no launcher consumes"*) echo "FAIL B8c-alias-consumed: warned on the canonical name";; *) pass=$((pass+1));; esac; n=$((n+1))
 
 # ---- 7. Step 7 runs, and only on success ------------------------------------------------
-arm B9-counter-reset-on-ok     - 0 'rabbot.json' "$(ls "$ST/state/ticks" 2>/dev/null)"
+arm B9-counter-reset-on-ok     - 0 'voice.json' "$(ls "$ST/state/ticks" 2>/dev/null)"
 arm B10-log-is-per-host        - 0 "recycle.$(hostname -s 2>/dev/null || echo unknown).log" \
                                    "$(ls "$ST/state/logs" 2>/dev/null)"
 arm B11-log-records-ok         - 0 '*OK exit-sent*' "$(cat "$ST/state/logs"/*.log 2>/dev/null)"

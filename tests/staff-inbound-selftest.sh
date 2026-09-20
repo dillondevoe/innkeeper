@@ -27,12 +27,12 @@ party:
   name: Test Party
   bus: BUSDIR
 brains:
-  - { name: rabbot, role: voice,  recycle_after: 12 }
-  - { name: geist,  role: gate,   recycle_after: 6 }
-  - { name: page,   role: worker, recycle_after: 8 }
-addressees: [teague]
+  - { name: voice, role: voice,  recycle_after: 12 }
+  - { name: gate,  role: gate,   recycle_after: 6 }
+  - { name: worker,   role: worker, recycle_after: 8 }
+addressees: [patron]
 aliases:
-  - { from: cleric, to: rabbot }
+  - { from: cleric, to: voice }
 YAML
 # sed -i is not portable (see mut() in the merge battery): BSD reads the next word as a
 # backup suffix, so this substitution silently never happened on macOS.
@@ -40,9 +40,9 @@ sed "s|BUSDIR|$W|" "$W/party.yaml" >"$W/party.yaml.ed" && mv -f "$W/party.yaml.e
 
 C="$W/comms"
 mk() { # mk <basename> <to-line> [cc-line]
-  { echo "---"; echo "from: geist"; echo "$2"; [ $# -ge 3 ] && echo "$3"; echo "---"; echo "body"; } > "$C/$1"
+  { echo "---"; echo "from: gate"; echo "$2"; [ $# -ge 3 ] && echo "$3"; echo "---"; echo "body"; } > "$C/$1"
 }
-run() { PARTY_BRAIN="${2:-rabbot}" bash "$IN" "${1:-}" 2>&1; }
+run() { PARTY_BRAIN="${2:-voice}" bash "$IN" "${1:-}" 2>&1; }
 # tier_of <output> <basename> -> the tier heading the name appeared under, or NONE.
 tier_of() {
   awk -v n="$2" '
@@ -54,9 +54,9 @@ tier_of() {
 echo "staff-inbound-selftest:"
 
 # ---- A. the three tiers must be THREE, and each arm names which one ---------------------
-mk "geist-to-rabbot-P2-routable-2026-09-20.md"  "to: [rabbot]"
-mk "notes-body-addressed-2026-09-20.md"          "to: [rabbot]"
-mk "geist-to-page-P2-cc-me-2026-09-20.md"        "to: [page]" "cc: [rabbot]"
+mk "gate-to-voice-P2-routable-2026-09-20.md"  "to: [voice]"
+mk "notes-body-addressed-2026-09-20.md"          "to: [voice]"
+mk "gate-to-worker-P2-cc-me-2026-09-20.md"        "to: [worker]" "cc: [voice]"
 out=$(run)
 [ "$(tier_of "$out" P2-routable)"     = 1  ] && ok "A1 a routable filename is TIER 1"    || bad "A1 a routable filename is TIER 1" "$(tier_of "$out" P2-routable)"
 [ "$(tier_of "$out" body-addressed)"  = 2  ] && ok "A2 body-only addressing is TIER 2"   || bad "A2 body-only addressing is TIER 2" "$(tier_of "$out" body-addressed)"
@@ -83,7 +83,7 @@ c1=$(grep -E '^  [a-z]' <<< "$out" | grep -Ec 'P2-routable|body-addressed|cc-me'
   && ok "B1 identical body addressing, different tiers (widths are not shared)" \
   || bad "B1 the two widths collapsed into one"
 # B2 PERMITTING TWIN for the tier-2 warning: tier 2 empty must NOT print the sender warning.
-mkdir -p "$W/quiet/_done"; printf -- '---\nfrom: geist\nto: [rabbot]\n---\nb\n' > "$W/quiet/geist-to-rabbot-P2-only-2026-09-20.md"
+mkdir -p "$W/quiet/_done"; printf -- '---\nfrom: gate\nto: [voice]\n---\nb\n' > "$W/quiet/gate-to-voice-P2-only-2026-09-20.md"
 qout=$(run "$W/quiet")
 case "$qout" in *"TIER 2 NON-EMPTY"*) bad "B2 TWIN: no tier-2 hits means no sender warning" "$qout";;
   *) ok "B2 TWIN: no tier-2 hits means no sender warning";; esac
@@ -91,17 +91,17 @@ case "$out" in *"TIER 2 NON-EMPTY"*) ok "B3 a tier-2 hit DOES print the sender w
   *) bad "B3 a tier-2 hit DOES print the sender warning" "$out";; esac
 
 # ---- C. self-echo, disposal, aliases ---------------------------------------------------
-mk "rabbot-to-geist-P2-my-own-outbound-2026-09-20.md" "to: [geist]"
+mk "voice-to-gate-P2-my-own-outbound-2026-09-20.md" "to: [gate]"
 out=$(run)
 [ "$(tier_of "$out" my-own-outbound)" = NONE ] && ok "C1 my own outbound is not an arrival" \
   || bad "C1 my own outbound listed as inbound" "$(tier_of "$out" my-own-outbound)"
 # C2 PERMITTING TWIN: the SAME name from another sender must still arrive. Without this, C1
 # passes for a reader that drops every comm mentioning my name.
-mk "geist-to-rabbot-P2-not-my-own-outbound-2026-09-20.md" "to: [rabbot]"
+mk "gate-to-voice-P2-not-my-own-outbound-2026-09-20.md" "to: [voice]"
 out=$(run)
 [ "$(tier_of "$out" not-my-own-outbound)" = 1 ] && ok "C2 TWIN: the same shape from another sender arrives" \
   || bad "C2 TWIN: a real arrival was swallowed by the self-echo guard"
-: > "$C/_done/geist-to-rabbot-P2-routable-2026-09-20.md"
+: > "$C/_done/gate-to-voice-P2-routable-2026-09-20.md"
 out=$(run)
 [ "$(tier_of "$out" P2-routable)" = NONE ] && ok "C3 a disposed comm drops out of tier 1" \
   || bad "C3 disposal ignored"
@@ -112,18 +112,18 @@ out=$(run)
   || bad "C4 alias not resolved" "$(tier_of "$out" alias-addressed)"
 # C5 CONTROL for C4: a name that is NOT mine must not match. Otherwise C4 passes on a
 # reader that treats every to: line as addressing everyone.
-mk "notes-addressed-to-teague-2026-09-20.md" "to: teague"
+mk "notes-addressed-to-patron-2026-09-20.md" "to: patron"
 out=$(run)
-[ "$(tier_of "$out" addressed-to-teague)" = NONE ] && ok "C5 CONTROL: another brain's name does not address me" \
-  || bad "C5 CONTROL: reader matches any to: line" "$(tier_of "$out" addressed-to-teague)"
+[ "$(tier_of "$out" addressed-to-patron)" = NONE ] && ok "C5 CONTROL: another brain's name does not address me" \
+  || bad "C5 CONTROL: reader matches any to: line" "$(tier_of "$out" addressed-to-patron)"
 # C6: a parenthetical cc is a cc, not an address -> tier 3, never tier 2.
-mk "notes-paren-cc-2026-09-20.md" "to: page (cc: rabbot — for awareness)"
+mk "notes-paren-cc-2026-09-20.md" "to: worker (cc: voice — for awareness)"
 out=$(run)
 [ "$(tier_of "$out" paren-cc)" = 3 ] && ok "C6 a parenthetical cc reads as cc (tier 3)" \
   || bad "C6 parenthetical cc misread" "$(tier_of "$out" paren-cc)"
 
 # ---- D. the empty-body sweep AND its control ------------------------------------------
-: > "$C/geist-to-rabbot-P2-zero-bytes-2026-09-20.md"
+: > "$C/gate-to-voice-P2-zero-bytes-2026-09-20.md"
 out=$(run)
 case "$out" in *"0 BYTES"*zero-bytes*) ok "D1 a 0-byte comm is annotated in tier 1";;
   *) bad "D1 a 0-byte comm is annotated in tier 1" "$out";; esac
@@ -137,7 +137,7 @@ case "$out" in *"do NOT dispose"*) ok "D3 the annotation says do NOT dispose";;
 brk="$REPO/staff/.inbound-mutant-$$.sh"
 trap 'rm -rf "$W"; rm -f "$brk"' EXIT
 sed 's|-size 0 2>/dev/null|-size 0 -name "NOTHING-MATCHES-THIS" 2>/dev/null|' "$IN" > "$brk"
-bout=$(PARTY_BRAIN=rabbot bash "$brk" 2>&1); rm -f "$brk"
+bout=$(PARTY_BRAIN=voice bash "$brk" 2>&1); rm -f "$brk"
 # The mutant must have REACHED the sweep. Without this, a mutant that died at an earlier guard
 # would satisfy D4 by printing nothing at all, and D4 would certify a control it never ran.
 case "$bout" in *"--- act:"*) ok "D4a the mutant reached the summary line (it did not die early)";;
@@ -148,11 +148,11 @@ case "$bout" in *"empty-body:0"*) ok "D5 ...and the broken sweep's count really 
   *) bad "D5 broken sweep count" "$(grep -- '--- act:' <<< "$bout")";; esac
 
 # ---- E. copy-marks, and refusals that name themselves ----------------------------------
-printf 'not a stub\n' > "$C/_done/geist-to-rabbot-P2-not-my-own-outbound-2026-09-20.md"
+printf 'not a stub\n' > "$C/_done/gate-to-voice-P2-not-my-own-outbound-2026-09-20.md"
 out=$(run)
 case "$out" in *"COPY-MARKS (1)"*) ok "E1 a non-empty _done twin with root present is a copy-mark";;
   *) bad "E1 copy-mark not detected" "$(grep -- '--- act:' <<< "$out")";; esac
-rm -f "$C/_done/geist-to-rabbot-P2-not-my-own-outbound-2026-09-20.md"
+rm -f "$C/_done/gate-to-voice-P2-not-my-own-outbound-2026-09-20.md"
 out=$(run)
 case "$out" in *"COPY-MARKS"*) bad "E2 TWIN: a zero-byte stub is NOT a copy-mark" "$out";;
   *) ok "E2 TWIN: a zero-byte stub is NOT a copy-mark";; esac

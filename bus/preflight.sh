@@ -126,6 +126,14 @@ report_one() {
   # "dropped" line would send a writer to rename a comm that no rename can deliver.
   local rest head t n nolane=""
   rest="${base#*-to-}"; head="${rest%%-cc-*}"
+  # ...AND AT THE PRIORITY TOKEN, WHICH IS THE OTHER RECOGNISED TERMINATOR. Dispatch already
+  # stops there; this scan did not, so it read the entire SUBJECT slug as address position.
+  # That was harmless only while the roster held invented names. The moment the example party
+  # was renamed to the four ROLE names -- `voice`, `worker`, `gate`, `researcher` -- every one
+  # of them became an ordinary English word, and a subject like `-P2-the-squire-and-the-gate-`
+  # produced a confident false TRUNCATED on a perfectly routed comm. A false warning about
+  # silent loss is worse than none (see the header); the rename is what made the class live.
+  head=$(printf '%s\n' "$head" | sed -E 's/-P[0-9]+-.*$//')
   for t in $(printf '%s\n' "$head" | tr '-' ' '); do
     n=$(bash "$ACTOR" resolve "$t" 2>/dev/null)
     known_names | grep -qx -- "$n" || continue          # not a roster name: subject word

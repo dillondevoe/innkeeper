@@ -4,8 +4,11 @@
 # copy of who the party is. Point INNKEEPER_PARTY at another file to use another
 # roster (that is what the selftests do).
 #
-# The example below is a real four-brain party. Rename them; nothing keys on these
-# strings.
+# THE EXAMPLE PARTY IS NAMED FOR THE FOUR ROLES, NOT FOR ANY REAL BRAIN. It used to carry the
+# author's own mesh names, which was wrong twice over: a public product must not ship one
+# household's roster, and a stranger reading `rabbot` learns nothing about what that seat does
+# while `voice` teaches it in one word. The old names are on the forbidden-token list so they
+# cannot drift back. Rename these freely; nothing keys on these strings.
 
 party:
   name: The Example Party
@@ -15,10 +18,10 @@ brains:                       # each owns a queue lane and can be addressed
   # recycle_after = how many REAL ticks this brain may accrue before lifecycle/ticks.sh
   # calls it due for a context recycle. A voice that answers in one line drifts slower
   # than a gate that reads whole diffs, so the number is per-brain, not per-party.
-  - { name: rabbot, role: voice,      class: cleric,       model: opus,   machine: local, recycle_after: 12 }
-  - { name: geist,  role: gate,       class: death-knight, model: fable,  machine: local, recycle_after: 6 }
-  - { name: page,   role: worker,     class: squire,       model: sonnet, machine: local, recycle_after: 8 }
-  - { name: augur,  role: researcher, class: oracle,       model: sonnet, machine: local, recycle_after: 10 }
+  - { name: voice,      role: voice,      class: cleric,       model: opus,   machine: local, recycle_after: 12 }
+  - { name: gate,       role: gate,       class: death-knight, model: fable,  machine: local, recycle_after: 6 }
+  - { name: worker,     role: worker,     class: squire,       model: sonnet, machine: local, recycle_after: 8 }
+  - { name: researcher, role: researcher, class: oracle,       model: sonnet, machine: local, recycle_after: 10 }
 
 familiars:                    # deterministic, no LLM, no lane
   - { name: watchman, role: watchman, every: 10m }
@@ -28,12 +31,12 @@ familiars:                    # deterministic, no LLM, no lane
 # a brain on another meter, a retired name still appearing mid-run. Membership here
 # keeps the filename grammar parsing the whole run without ever creating a queue dir
 # nothing polls.
-addressees: [teague]
+addressees: [patron]
 
 # Alternate spellings that resolve to a roster name — a machine name, a class name,
 # an old name a sender still uses. A comm addressed to the alias reaches the brain.
 aliases:
-  - { from: cleric, to: rabbot }
+  - { from: cleric, to: voice }
 
 # Where the launchers live. lifecycle/recycle.sh greps these for the flag name it is
 # about to write, so a flag no launcher consumes is caught at the call site instead of

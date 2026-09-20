@@ -4,10 +4,17 @@
 set -uo pipefail
 R=$(cd "$(dirname "$0")/.." && pwd -P)
 IMPL=${LEASE_IMPL:-$R/lifecycle/lease.sh}
-EXPECT_ARMS=${LEASE_NESTED:+18}
-EXPECT_ARMS=${EXPECT_ARMS:-21}
+EXPECT_ARMS=${LEASE_NESTED:+20}
+EXPECT_ARMS=${EXPECT_ARMS:-23}
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-export INNKEEPER_HOME=$T PARTY_BRAIN=tester LEASE_BOOT_EPOCH=1000
+# LEASE_AWAKE_S IS PINNED FOR THE WHOLE BATTERY, and that is not tidiness.
+# Without it every arm inherits whatever awake clock the HOST happens to have, so the
+# suite measures the machine as much as the code. It bit immediately: the no-awake-clock
+# note added for the macOS case appends to the status line, four `$`-anchored arms were
+# authored on Linux where the note is silent, and they were green here and red on the one
+# platform the feature exists for. The clock is an INPUT; arms that care about it set it
+# themselves (S1-S5b below), and no arm inherits it.
+export INNKEEPER_HOME=$T PARTY_BRAIN=tester LEASE_BOOT_EPOCH=1000 LEASE_AWAKE_S=100000
 L() { bash "$IMPL" "$@" 2>/dev/null; }
 LOCK=$T/state/tester.lease
 n=0 pass=0
@@ -73,6 +80,18 @@ arm S3-reboot-beats-the-awake-clock "$(LEASE_AWAKE_S=100000 SL status)" '^STALE 
 # which would make every legacy lock look infinitely old.
 echo "$(( $(date +%s) - 3600 )) livenonce 1000" > "$S/state/tester.lease"
 arm S4-legacy-lock-falls-back-to-wall "$(LEASE_AWAKE_S=100000 SL status)" '^STALE age=3600 nonce=livenonce$'
+
+# S5/S5b: A HOST WITH NO AWAKE CLOCK MUST SAY SO. Geist's gate on the sleep lease: the fallback
+# to wall-clock aging works exactly as written on a host without /proc/uptime -- and says
+# nothing, so on a MacBook (the machine a stranger's "laptop" most likely IS) the sleep bug the
+# feature is named for is still live and invisible. A stated limit is shippable; a silent one is
+# not. LEASE_AWAKE_S= (set but EMPTY) is the no-clock host: it takes the same branch a missing
+# /proc/uptime takes, which is why awake_seconds() returns "" rather than 0 for both.
+echo "$(( $(date +%s) - 10 )) livenonce 1000 " > "$S/state/tester.lease"
+arm S5-no-awake-clock-states-the-limit "$(LEASE_AWAKE_S= LEASE_UPTIME_FILE=/nonexistent/uptime SL status)" 'no awake clock on this host'
+# THE CONTROL, and it is the half that can rot: a note printed unconditionally would pass S5
+# while telling every Linux user their clock is broken. This asserts SILENCE where the clock exists.
+arm S5b-CONTROL-a-host-with-a-clock-says-nothing "$(LEASE_AWAKE_S=100000 SL status)" '^HELD age=[0-9]+ nonce=livenonce$'
 
 # ---- MUTATION ARMS -------------------------------------------------------------------------
 # Mutants are staged INSIDE lifecycle/ even though lease.sh derives no path from its own location.

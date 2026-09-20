@@ -32,7 +32,13 @@ BUILTIN=$(printf '%s\t%s\n' \
   path '/(home|Users)/[A-Za-z_][A-Za-z0-9_-]*')
 
 # Where a roster name is a hard-coded address rather than an English word (D3).
-ADDR_DIRS='^(bus|lifecycle|bin|staff|roles)/'
+#
+# `fixtures/` IS SHIPPED DATA AND WAS SCANNED BY NO CLASS. The list named the dirs that hold
+# code, on the reasoning that a name in code is an address while a name in prose is a word --
+# but a committed fixture is neither: it is a value the product ships, and it carried a real
+# comm basename in `first-light.yaml:10` for exactly that reason. Data the repo publishes is
+# judged like code, not like documentation.
+ADDR_DIRS='^(bus|lifecycle|bin|staff|roles|fixtures)/'
 
 usage() { echo "usage: port-gate.sh --source SRC | --no-source  DEST..." >&2; exit 2; }
 
