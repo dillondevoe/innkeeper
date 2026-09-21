@@ -81,7 +81,7 @@ arm S3-reboot-beats-the-awake-clock "$(LEASE_AWAKE_S=100000 SL status)" '^STALE 
 echo "$(( $(date +%s) - 3600 )) livenonce 1000" > "$S/state/tester.lease"
 arm S4-legacy-lock-falls-back-to-wall "$(LEASE_AWAKE_S=100000 SL status)" '^STALE age=360[0-9] nonce=livenonce$'
 
-# S5/S5b: A HOST WITH NO AWAKE CLOCK MUST SAY SO. Geist's gate on the sleep lease: the fallback
+# S5/S5b: A HOST WITH NO AWAKE CLOCK MUST SAY SO. The gate's ruling on the sleep lease: the fallback
 # to wall-clock aging works exactly as written on a host without /proc/uptime -- and says
 # nothing, so on a MacBook (the machine a stranger's "laptop" most likely IS) the sleep bug the
 # feature is named for is still live and invisible. A stated limit is shippable; a silent one is
