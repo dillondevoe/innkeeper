@@ -22,7 +22,7 @@ HERE=$(cd "$(dirname "$0")" && pwd -P)
 REPO=$(cd "$HERE/.." && pwd -P)
 PRE="$REPO/bin/live-preflight.sh"
 
-EXPECT_ARMS=13
+EXPECT_ARMS=16
 fails=0; arms=0
 ok()  { arms=$((arms+1)); echo "  $1 — PASS"; }
 bad() { arms=$((arms+1)); fails=$((fails+1)); echo "  $1 — FAIL${2:+ :: $2}"; }
@@ -149,7 +149,6 @@ if printf '%s' "$OUT" | grep -q 'NOT CHECKED'; then
 else bad "L8-the-unverifiable-condition-is-named-in-the-output" "out=[$OUT]"; fi
 
 # --- L9: usage ------------------------------------------------------------------------------
-run "${BASEOK[@]}"; :
 OUT=$(env "${BASEOK[@]}" "$BASH_ABS" "$PRE" --what 2>&1); RC=$?
 if [ "$RC" = 2 ]; then ok "L9-unknown-flag-is-usage-rc2"
 else bad "L9-unknown-flag-is-usage-rc2" "rc=$RC"; fi
@@ -159,6 +158,30 @@ run INNKEEPER_LIVE= "INNKEEPER_CLAUDE=$STUB"
 if printf '%s' "$OUT" | grep -q 'Nothing has been spent'; then
   ok "L10-refusal-states-that-nothing-was-spent"
 else bad "L10-refusal-states-that-nothing-was-spent" "out=[$OUT]"; fi
+
+# --- L11: --budget is the ONE resolver, and the report reads the same number -----------------
+# The ceiling is resolved here and ENFORCED in roles/claude-call.sh, which calls `--budget`
+# rather than re-deriving the default. Two halves spelling one rule in two languages is this
+# repo's oldest scar. L11 pins that they agree: whatever --budget prints is the number the
+# human-readable report shows.
+B=$(env INNKEEPER_LIVE_MAX_USD=0.25 "$BASH_ABS" "$PRE" --budget 2>&1); RCB=$?
+run "${BASEOK[@]}" INNKEEPER_LIVE_MAX_USD=0.25
+if [ "$RCB" = 0 ] && [ "$B" = "0.25" ] && printf '%s' "$OUT" | grep -q 'budget ceiling: \$0\.25'; then
+  ok "L11-budget-mode-and-the-report-agree"
+else bad "L11-budget-mode-and-the-report-agree" "rc=$RCB budget=[$B]"; fi
+
+# --- L11b: --budget takes the default when the ceiling is UNSET -----------------------------
+B=$(env -u INNKEEPER_LIVE_MAX_USD "$BASH_ABS" "$PRE" --budget 2>&1); RCB=$?
+if [ "$RCB" = 0 ] && [ "$B" = "3.00" ]; then ok "L11b-unset-ceiling-resolves-to-the-default"
+else bad "L11b-unset-ceiling-resolves-to-the-default" "rc=$RCB budget=[$B]"; fi
+
+# --- L11c: --budget REFUSES what the report refuses ------------------------------------------
+# A resolver that printed a fallback here while the report refused would hand the enforcer a
+# ceiling the gate had already rejected: enforcement against a number nobody approved, with
+# the report still reading correctly.
+B=$(env INNKEEPER_LIVE_MAX_USD="one dollar" "$BASH_ABS" "$PRE" --budget 2>&1); RCB=$?
+if [ "$RCB" != 0 ]; then ok "L11c-budget-mode-refuses-an-unparseable-ceiling"
+else bad "L11c-budget-mode-refuses-an-unparseable-ceiling" "rc=$RCB budget=[$B]"; fi
 
 echo
 if [ "$arms" -ne "$EXPECT_ARMS" ]; then

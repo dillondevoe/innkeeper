@@ -30,7 +30,8 @@ KEEP=0; [ "${1:-}" = "--keep" ] && KEEP=1
 
 command -v git >/dev/null 2>&1 || { echo "FATAL: this quest works on a real git repo and git is not installed" >&2; exit 2; }
 
-SANDBOX=$(mktemp -d "${TMPDIR:-/tmp}/hello-party.XXXXXX") || { echo "cannot make a sandbox" >&2; exit 2; }
+SANDBOX=$(mktemp -d "${TMPDIR:-/tmp}"/hello-party.XXXXXX) || { echo "cannot make a sandbox" >&2; exit 2; }
+SANDBOX=${SANDBOX%/}
 [ "$KEEP" = 1 ] || trap 'rm -rf "$SANDBOX"' EXIT
 export INNKEEPER_BUS="$SANDBOX/bus"
 export INNKEEPER_HOME="$SANDBOX"

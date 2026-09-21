@@ -25,6 +25,18 @@ version=$(sh "$repo/tool.sh" --version 2>/dev/null) || version=""
 printf '\n'
 printf 'Your quest "%s" is done.\n\n' "$quest"
 printf '  The tool now answers --version with: %s\n' "$version"
-printf '  The party made %s commits to get there: the gate refused the first one.\n' "$commits"
+# THE CLAUSE ABOUT THE REFUSAL IS NOW DERIVED, AND IT WAS THE ONE THING IN THIS FILE THAT
+# WAS NOT. The header above promises every number is read back out of the world; the words
+# beside the number were hard-coded prose that happened to be true of the scripted quest.
+# The first live run passed the gate on attempt 1 and this file announced "1 commits to get
+# there: the gate refused the first one" -- a closing summary telling the human the opposite
+# of what they had just watched. A count with a fixed caption is not a reading; it is the
+# driver's story with a measurement attached to lend it weight.
+case "$commits" in
+  1) story="the gate passed it first time";;
+  \?) story="how many times the gate refused cannot be read from this repo";;
+  *) story="the gate refused the first one";;
+esac
+printf '  The party made %s commits to get there: %s.\n' "$commits" "$story"
 printf '  The result was merged once, to: %s\n' "$dest"
 printf '\nNothing else on your machine was touched.\n'
