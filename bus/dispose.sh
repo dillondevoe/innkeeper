@@ -49,7 +49,10 @@ R=$(cd "$(dirname "$0")/.." && pwd -P)
 [ "${1:-}" = "--selftest" ] && exec bash "$R/tests/bus-dispose-selftest.sh"
 
 ACTOR="$R/bus/actor.sh"
-CD="${TICKS_COMMS_DIR:-${INNKEEPER_HOME:-$R}/comms}"
+# Same rule as bus/enqueue.sh and bus/merge.sh: a comms dir is WRITTEN, so it is never guessed.
+# TICKS_COMMS_DIR still wins outright; only the fallback changed, and bash evaluates the inner
+# expansion solely when TICKS_COMMS_DIR is unset or empty — a caller that sets it is unaffected.
+CD="${TICKS_COMMS_DIR:-${INNKEEPER_HOME:?INNKEEPER_HOME not set — dispose.sh will not guess where your comms live}/comms}"
 
 force=0
 [ "${1:-}" = "--force" ] && { force=1; shift; }

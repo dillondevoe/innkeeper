@@ -55,14 +55,24 @@ BUS=$(bash "$ACTOR" bus) || { echo "FATAL: actor.sh refused to name the bus (unr
 COMMS="$BUS/comms"
 DONE="$COMMS/_done"
 QUEUES="$BUS/queues"
-STATE="${INNKEEPER_HOME:-$REPO}/state/queues"
-DEAD="${INNKEEPER_HOME:-$REPO}/state/deadletter"
-LOG_FILE=${INNKEEPER_ENQUEUE_LOG:-${INNKEEPER_HOME:-$REPO}/state/enqueue.log}
+# REQUIRED for the three WRITE paths below — the same call bus/merge.sh and lifecycle/lease.sh
+# already make, for the same reason, and this file was the odd one out. A default of $REPO does
+# not fail; it SUCCEEDS at writing state into the user's clone, which is how a sandbox stops
+# being one. Note what it is NOT: the PARTY line above still falls back to $REPO, because that
+# is a READ of a shipped artifact. Reads may default. Writes must be told where to go.
+#
+# The `--selftest` dispatch moved ABOVE this line and must stay there: it execs another script
+# and needs no state, so requiring a home first would refuse this file's own documented entry
+# point for every caller who has not set one. merge.sh orders it the same way.
+[ "${1:-}" = "--selftest" ] && exec bash "$REPO/tests/bus-enqueue-selftest.sh"
+: "${INNKEEPER_HOME:?INNKEEPER_HOME not set — enqueue.sh will not guess where your state lives}"
+STATE="$INNKEEPER_HOME/state/queues"
+DEAD="$INNKEEPER_HOME/state/deadletter"
+LOG_FILE=${INNKEEPER_ENQUEUE_LOG:-$INNKEEPER_HOME/state/enqueue.log}
 BATCH_S=${BATCH_S:-1800}            # P3 window: 30 min
 BATCH_LOW_S=${BATCH_LOW_S:-21600}   # ack/FYI window: 6 h — any other wake flushes it sooner
 STORM_N=${STORM_N:-4}
 
-[ "${1:-}" = "--selftest" ] && exec bash "$REPO/tests/bus-enqueue-selftest.sh"
 [ $# -eq 0 ] || { sed -n '2,10p' "$0"; exit 2; }
 
 mkdir -p "$QUEUES" "$STATE" "$(dirname "$LOG_FILE")"

@@ -146,5 +146,36 @@ run; chk "E12 lanes only addressee owns no lane" "$(markers)" "gate"
 new_bus; comm "worker-to-nobody-P2-x-2026-09-20.md" "priority: P2"
 run; chk "E13 off-roster no lane, no marker" "$(markers)" ""
 
+
+# E17/E18/E19 — WHERE STATE GOES IS NOT GUESSED. bus/merge.sh and lifecycle/lease.sh already
+# refuse an unset INNKEEPER_HOME by name; enqueue.sh used to default it to $REPO, which does not
+# fail -- it SUCCEEDS at writing state/queues, state/deadletter and state/enqueue.log into the
+# user's clone. Every arm above sets INNKEEPER_HOME via new_bus(), so the whole battery could
+# stay green while that default rotted; these three are the arms that look at it directly.
+#
+# E18 is the SUBSTRATE for E17. Without it "no state/ appeared in the checkout" passes just as
+# well against an enqueue.sh that writes nothing anywhere, or that cannot run at all.
+# E19 guards the ORDERING: the --selftest dispatch must stay ABOVE the requirement, or this
+# file's own documented entry point refuses for every caller who has not set a home. It checks
+# that statically -- running `--selftest` from here would exec this battery and recurse forever.
+_probe=$(mktemp -d); cp -a "$REPO/bus" "$REPO/party.yaml" "$_probe/" 2>/dev/null
+( cd "$_probe" && env -u INNKEEPER_HOME -u INNKEEPER_BUS -u INNKEEPER_PARTY \
+    bash "$_probe/bus/enqueue.sh" >/dev/null 2>"$_probe/err" ); _rc=$?
+chk "E17 no home -> refuses rather than writing into the clone" \
+    "$([ "$_rc" != 0 ] && [ ! -e "$_probe/state" ] && echo REFUSED-CLEAN || echo LEAKED)" "REFUSED-CLEAN"
+chk "E17b and it says which variable, by name" \
+    "$(grep -c 'INNKEEPER_HOME not set' "$_probe/err")" "1"
+
+_h=$(mktemp -d); new_bus >/dev/null 2>&1
+chk "E18 substrate: WITH a home the same call runs and writes under it" \
+    "$(run; [ -d "$HOME_D/state" ] && echo WROTE-UNDER-HOME || echo NOTHING)" "WROTE-UNDER-HOME"
+
+# STATIC, deliberately: --selftest execs THIS file, so an arm that runs it would recurse
+# forever. The property is a source ordering, so read the source.
+_sel=$(grep -n -- '--selftest.*exec bash' "$E" | cut -d: -f1)
+_req=$(grep -n 'INNKEEPER_HOME:?' "$E" | cut -d: -f1)
+chk "E19 --selftest dispatch stays ABOVE the home requirement" \
+    "$([ -n "$_sel" ] && [ -n "$_req" ] && [ "$_sel" -lt "$_req" ] && echo ORDERED || echo "MISORDERED(sel=$_sel req=$_req)")" "ORDERED"
+
 [ $fail -eq 0 ] && echo "SELFTEST: ALL PASS" || echo "SELFTEST: FAILURES"
 exit $fail
