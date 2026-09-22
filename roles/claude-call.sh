@@ -42,6 +42,23 @@ claude_call() {
     return 1
   }
 
+  # (1a) NO LEDGER, NO CALL. Both enforcers below read the ledger, so with it unset they were
+  # skipped and the call ran UNMETERED and UNCAPPED: the one place money moves defaulted to
+  # ungoverned, and only a careful caller (live-party.sh exports it) kept it governed. Same
+  # shape as bus/merge.sh refusing an unset INNKEEPER_HOME -- refuse by name, do not guess.
+  # An unwritable directory is the same defect one step later: the spend happens and the
+  # append fails, so it is checked here too, before anything is spent.
+  if [ -z "${INNKEEPER_LEDGER:-}" ]; then
+    echo "claude-call: REFUSED. INNKEEPER_LEDGER is not set, so this call could be neither" >&2
+    echo "claude-call: metered nor capped. No model call was made and nothing was spent." >&2
+    return 1
+  fi
+  if ! [ -d "$(dirname "$INNKEEPER_LEDGER")" ] || ! [ -w "$(dirname "$INNKEEPER_LEDGER")" ]; then
+    echo "claude-call: REFUSED. INNKEEPER_LEDGER=$INNKEEPER_LEDGER -- its directory is missing" >&2
+    echo "claude-call: or not writable, so the cost could not be recorded. Nothing was spent." >&2
+    return 1
+  fi
+
   # (1b) THE CEILING GOVERNS HERE, BECAUSE THIS IS WHERE THE MONEY MOVES.
   # The preflight resolves and validates the number and is gone before anything is spent.
   # Until this block existed, nothing compared spend to it: the first live run cost $0.9569

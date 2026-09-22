@@ -17,7 +17,7 @@ trap 'rm -rf "$TMP"' EXIT
 PASS=0; FAIL=0; ARMS=0
 ok()  { ARMS=$((ARMS+1)); PASS=$((PASS+1)); printf '  %s — PASS\n' "$1"; }
 bad() { ARMS=$((ARMS+1)); FAIL=$((FAIL+1)); printf '  %s — FAIL :: %s\n' "$1" "$2"; }
-EXPECT_ARMS=16
+EXPECT_ARMS=18
 
 # --- the stub CLI -----------------------------------------------------------------------
 # $STUB_MODE picks the behaviour; $STUB_CALLS records that it ran at all.
@@ -195,6 +195,26 @@ OUT=$(env "${BASEENV[@]}" INNKEEPER_LIVE_MAX_USD=5.00 "INNKEEPER_LEDGER=$LED" "S
 if [ "$RC" -ne 0 ] && grep -q 'LOWER BOUND' <<<"$OUT" && [ ! -f "$CALLS" ]; then
   ok "C9c-a-broken-meter-stops-the-quest-even-with-ceiling-to-spare"
 else bad "C9c-a-broken-meter-stops-the-quest-even-with-ceiling-to-spare" "rc=$RC out=[$OUT]"; fi
+
+# --- C10: AN UNSET LEDGER REFUSES, BEFORE THE CLI RUNS -----------------------------------
+# Both enforcers (UNKNOWN-stop, ceiling) read the ledger, so with INNKEEPER_LEDGER unset they
+# were skipped and the call ran UNMETERED and UNCAPPED -- live-party.sh exporting it was the
+# caller being careful, not the tool refusing. C10 runs the role with the variable unset and
+# asserts it refuses BY NAME and the stub never ran. C1b is C10's permitting twin (same role,
+# ledger set, stub DOES run); C10b covers the other half: set, but its directory unwritable.
+T="$TMP/c10"; mktoy "$T"; CALLS="$TMP/c10.calls"
+OUT=$(env -u INNKEEPER_LEDGER "${BASEENV[@]}" "STUB_CALLS=$CALLS" \
+      bash "$REPO/roles/claude-worker.sh" "$T" first 2>&1); RC=$?
+if [ "$RC" -ne 0 ] && grep -q 'INNKEEPER_LEDGER' <<<"$OUT" && [ ! -f "$CALLS" ]; then
+  ok "C10-unset-ledger-refuses-by-name-and-the-CLI-never-runs"
+else bad "C10-unset-ledger-refuses-by-name-and-the-CLI-never-runs" "rc=$RC calls=$([ -f "$CALLS" ] && echo yes || echo no) out=[$OUT]"; fi
+
+T="$TMP/c10b"; mktoy "$T"; CALLS="$TMP/c10b.calls"
+OUT=$(env "${BASEENV[@]}" "STUB_CALLS=$CALLS" "INNKEEPER_LEDGER=$TMP/no-such-dir/c10b.tsv" \
+      bash "$REPO/roles/claude-worker.sh" "$T" first 2>&1); RC=$?
+if [ "$RC" -ne 0 ] && grep -q 'INNKEEPER_LEDGER' <<<"$OUT" && [ ! -f "$CALLS" ]; then
+  ok "C10b-unwritable-ledger-dir-refuses-and-the-CLI-never-runs"
+else bad "C10b-unwritable-ledger-dir-refuses-and-the-CLI-never-runs" "rc=$RC calls=$([ -f "$CALLS" ] && echo yes || echo no) out=[$OUT]"; fi
 
 echo
 if [ "$ARMS" -ne "$EXPECT_ARMS" ]; then
