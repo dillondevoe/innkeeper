@@ -52,8 +52,14 @@ esac
 [ $# -ge 1 ] || usage
 case "$1" in -*) usage ;; esac
 
-if [ -z "$LIST" ] || [ ! -s "$LIST" ]; then
-  echo "CANNOT-ASSESS - forbidden list unset or empty (INNKEEPER_FORBIDDEN)"; exit 2
+# Three worlds, three lines: "no variable" and "no file" call for different fixes, and one
+# message for both sent a reader hunting for a file that existed (Geist, FOREGROUND 382 s3).
+if [ -z "$LIST" ]; then
+  echo "CANNOT-ASSESS - forbidden list unset (INNKEEPER_FORBIDDEN is not set)"; exit 2
+elif [ ! -e "$LIST" ]; then
+  echo "CANNOT-ASSESS - forbidden list not found at INNKEEPER_FORBIDDEN=$LIST"; exit 2
+elif [ ! -s "$LIST" ]; then
+  echo "CANNOT-ASSESS - forbidden list empty at INNKEEPER_FORBIDDEN=$LIST"; exit 2
 fi
 # CR stripped: a CRLF list would otherwise put \r at the end of every regex and disable every rule.
 rules=$( { printf '%s\n' "$BUILTIN"; tr -d '\r' <"$LIST" | command grep -Ev '^[[:space:]]*(#|$)'; } )

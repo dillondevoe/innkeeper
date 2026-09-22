@@ -4,7 +4,7 @@
 # verdict: a skipped arm cannot hide inside a green.
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")/.." && pwd -P)
-EXPECT_ARMS=27
+EXPECT_ARMS=28
 pass=0 fail=0 arms=0
 
 # THE SECRETS SCANNER IS A PRECONDITION, AND A MISSING ONE IS NOT A FAILING ARM.
@@ -69,6 +69,7 @@ arm W1-wall-source-unread 1 '^REFUSED wall ' -- GS --source /nowhere/zorblax/x.s
 # Fail closed, and say why.
 arm C1-empty-file   2 'zero-line'            -- G "$(f docs/empty.md '')"
 arm C2-no-list      2 'forbidden list unset' -- env INNKEEPER_FORBIDDEN= bash "$R"/bin/port-gate.sh --no-source "$R/docs/clean.md"
+arm C2b-list-path-missing 2 'not found at INNKEEPER_FORBIDDEN=/nonexistent/forbidden.txt' -- env INNKEEPER_FORBIDDEN=/nonexistent/forbidden.txt bash "$R"/bin/port-gate.sh --no-source "$R/docs/clean.md"
 arm C3-no-scanner   2 'scanner not found'    -- env INNKEEPER_GITLEAKS=no-such-scanner-bin INNKEEPER_FORBIDDEN=$T/list bash "$R"/bin/port-gate.sh --no-source "$R/docs/clean.md"
 
 arm S1-secret      1 '^SECRET docs/s.md '    -- G "$(f docs/s.md "aws_access_key_id = AKIA""Z7Q3KXN4VBSW2LTM\naws_secret_access_key = \"q8Vn2rT5wX1yB4mK7pL0""sD3fG6hJ9aZcE2uI5oP8\"\n")"
