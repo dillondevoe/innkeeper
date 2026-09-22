@@ -64,7 +64,11 @@ _exists()  { [ -f "$(_path "$1")" ]; }
 
 _lane_ok() {  # $1 = a lane token -> prints the resolved roster name, rc 1 if it owns no lane
   local r; r=$(bash "$ACTOR" resolve "$1" 2>/dev/null) || return 1
-  bash "$ACTOR" lanes 2>/dev/null | command grep -qx "$r" || return 1
+  # CAPTURE, THEN MATCH -- never `lanes | grep -q` under pipefail. grep -q exits on the first
+  # match, the writer's next echo takes SIGPIPE, and pipefail reports a FOUND lane as absent.
+  # Under load that refused the first-listed lane (FOREGROUND-382 item 3); arm M-PIPE pins it.
+  local ls; ls=$(bash "$ACTOR" lanes 2>/dev/null) || return 1
+  command grep -qx -- "$r" <<<"$ls" || return 1
   printf '%s\n' "$r"
 }
 

@@ -7,8 +7,8 @@
 set -uo pipefail
 R=$(cd "$(dirname "$0")/.." && pwd -P)
 IMPL=${MERGE_IMPL:-$R/bus/merge.sh}
-EXPECT_ARMS=${MERGE_NESTED:+23}
-EXPECT_ARMS=${EXPECT_ARMS:-26}
+EXPECT_ARMS=${MERGE_NESTED:+24}
+EXPECT_ARMS=${EXPECT_ARMS:-27}
 T=$(mktemp -d); H15=$(mktemp -d)
 trap 'chmod -R u+w "$H15" 2>/dev/null; rm -rf "$T" "$H15"' EXIT
 export INNKEEPER_HOME=$T
@@ -124,6 +124,17 @@ arm M13-known-lane-permitted "$(M commit q-seven "$LANE_B" "$src_a")" '^MERGED '
 # green means "consistent with my intent" and nothing more. These two point the battery at
 # plausible WRONG implementations and assert it goes RED -- the only evidence that M4/M11 are
 # discriminating rather than riding on a happy path.
+# --- M-PIPE: a lane that EXISTS must never read as absent because its reader quit early ----
+# `actor.sh lanes | grep -qx` under pipefail: grep exits on the first match, the writer's next
+# echo takes SIGPIPE (141), and pipefail turns a FOUND lane into "owns no queue lane". Under
+# load it fired on the first-listed lane only -- the one with the most echoes left to write --
+# and was the whole of FOREGROUND-382 item 3 (murder-quest rc 8). A roster whose remaining
+# lanes overflow the pipe buffer makes the writer block and die DETERMINISTICALLY, no load, no
+# timing: the pre-fix file refuses this every run.
+BIG=$(mktemp); awk -v a="$LANE_A" '{print} $0 ~ "name:[[:space:]]*"a"[[:space:]]*," {for(i=0;i<20000;i++) printf "  - { name: filler%05d, role: worker }\n", i}' "$INNKEEPER_PARTY" > "$BIG"
+arm M-PIPE-first-lane-survives-an-early-reader "$(INNKEEPER_PARTY=$BIG bash "$IMPL" begin q-pipe "$LANE_A" 2>&1)" '^ATTEMPT '
+rm -f "$BIG"
+
 if [ -z "${MERGE_NESTED:-}" ]; then
   mut() { # name, sed-program -> "name=PASS" if the mutant is CAUGHT (battery red), else FAILED-TO-CATCH
     # The mutant MUST be staged inside bus/: merge.sh resolves actor.sh as "$HERE/actor.sh",
