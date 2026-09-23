@@ -134,12 +134,24 @@ report_one() {
   # produced a confident false TRUNCATED on a perfectly routed comm. A false warning about
   # silent loss is worse than none (see the header); the rename is what made the class live.
   head=$(printf '%s\n' "$head" | sed -E 's/-P[0-9]+-.*$//')
+  # CAPTURE, THEN MATCH -- never `<producer> | grep -q` under pipefail. grep -q exits on the
+  # first match, the producer's next write takes SIGPIPE (141), and pipefail turns a FOUND
+  # name into a not-found. Same defect merge.sh/quest.sh carried as FOREGROUND-382 item 3,
+  # hoisted out of the loop because the rosters do not change between iterations.
+  # The failure DIRECTION differs per line and both are bad: on the known_names test it
+  # skips a name that IS on the roster, so a real TRUNCATED goes unreported (silent loss --
+  # the exact thing this check exists to warn about); on the lane test it reports NO LANE
+  # for an actor that owns one, sending the writer to the wrong fix. Arm A-PIPE pins the
+  # first; A-PIPE2 pins the second.
+  local _kn _lanes
+  _kn=$(known_names)
+  _lanes=$(bash "$ACTOR" list lanes 2>/dev/null; bash "$ACTOR" roster 2>/dev/null \
+             | sed -n 's/^lanes:[[:space:]]*//p' | tr ' ' '\n')
   for t in $(printf '%s\n' "$head" | tr '-' ' '); do
     n=$(bash "$ACTOR" resolve "$t" 2>/dev/null)
-    known_names | grep -qx -- "$n" || continue          # not a roster name: subject word
+    command grep -qx -- "$n" <<<"$_kn" || continue      # not a roster name: subject word
     case " $who " in *" $n "*) continue;; esac          # actually dispatched
-    if bash "$ACTOR" list lanes 2>/dev/null | grep -qx -- "$n" \
-       || bash "$ACTOR" roster 2>/dev/null | sed -n 's/^lanes:[[:space:]]*//p' | tr ' ' '\n' | grep -qx -- "$n"; then
+    if command grep -qx -- "$n" <<<"$_lanes"; then
       case " $dropped " in *" $t "*) continue;; esac
       dropped="$dropped $t"                             # has a lane, still not dispatched
     else

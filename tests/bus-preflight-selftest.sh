@@ -15,7 +15,7 @@ HERE=$(cd "$(dirname "$0")" && pwd -P)
 REPO=$(cd "$HERE/.." && pwd -P)
 PRE="$REPO/bus/preflight.sh"
 
-EXPECT_ARMS=23
+EXPECT_ARMS=25
 fails=0; arms=0
 ok()  { arms=$((arms+1)); echo "  $1 — PASS"; }
 bad() { arms=$((arms+1)); fails=$((fails+1)); echo "  $1 — FAIL${2:+ :: $2}"; }
@@ -172,6 +172,39 @@ comm "gate-to-patron-P2-no-lane-2026-09-20.md" "from: gate" "to: [patron]"
 out=$(run "$WORK/comms/gate-to-patron-P2-no-lane-2026-09-20.md")
 case "$out" in *"DISPATCHES TO: NOBODY"*) ok "E3 an addressee with no lane dispatches to nobody";;
   *) bad "E3 an addressee with no lane dispatches to nobody" "$out";; esac
+
+# ---- F. A-PIPE: a reader that quits early must not silence a real finding --------------
+# `known_names | grep -qx` and `list lanes | grep -qx` under pipefail: grep -q exits on the
+# first match, the producer's next write takes SIGPIPE (141), and pipefail turns a FOUND
+# name into a not-found. This is FOREGROUND-382 item 3, the defect merge.sh and quest.sh
+# carried, living in this file on three lines.
+#
+# The two lines fail in DIFFERENT directions and the two arms below name which, because
+# "it went quiet" and "it said the wrong thing" want different fixes:
+#   known_names test -> `continue`: the name is dismissed as a subject word and the
+#     TRUNCATED warning DISAPPEARS. A check about silent loss, failing silently.
+#   lane test -> the else branch: an actor that OWNS a lane is reported NO LANE, which
+#     sends the writer to create a lane that already exists.
+#
+# Deterministic with no load and no timing: a roster whose remaining lanes overflow the
+# pipe buffer forces the producer to block, so it is still writing when grep exits. The
+# pre-fix file goes silent on this fixture every run (verified before the fix landed).
+BIGP="$WORK/party-big.yaml"
+awk '{print} $0 ~ "name: voice," {for(i=0;i<20000;i++) printf "  - { name: filler%05d, role: worker }\n", i}' \
+  "$WORK/party.yaml" > "$BIGP"
+comm "gate-to-worker-voice-the-squire-pipe-2026-09-20.md" "from: gate" "to: [worker]"
+out=$(INNKEEPER_PARTY="$BIGP" run "$WORK/comms/gate-to-worker-voice-the-squire-pipe-2026-09-20.md")
+case "$out" in *"TRUNCATED"*voice*) ok "A-PIPE a long roster does not silence a real TRUNCATED";;
+  *) bad "A-PIPE a long roster does not silence a real TRUNCATED" "$out";; esac
+# A-PIPE2 names the OTHER rejection. Without it, an implementation that reported NO LANE
+# for voice would still be "not silent" and A-PIPE alone could not tell the two apart.
+# STATED LIMIT: A-PIPE2 was NOT shown firing. Against the pre-fix file it PASSES, because
+# the known_names test short-circuits with `continue` before the lane test is ever reached
+# -- the earlier guard shadows the branch, which is the exact hazard this file's header
+# warns about, here in the battery rather than the source. It is a discrimination arm, not
+# a pre-fix arm, and it is kept for what it rules out rather than for what it caught.
+case "$out" in *"NO LANE"*) bad "A-PIPE2 a lane-owning actor is not reported NO LANE" "$out";;
+  *) ok "A-PIPE2 a lane-owning actor is not reported NO LANE";; esac
 
 if [ "$arms" -ne "$EXPECT_ARMS" ]; then
   echo "ARM COUNT: ran $arms, expected $EXPECT_ARMS — an arm was skipped or added."
