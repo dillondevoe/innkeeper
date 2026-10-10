@@ -52,6 +52,37 @@ A toy or unfinished:
   (no Bash). A hostile prompt could still modify files in the working directory it is given. Do
   not widen this to skip permissions.
 
+## Why not just use built-in agent teams?
+
+Use them if they fit. Innkeeper is for the cases where you want the run to outlive any one
+process and want every step on disk where you can read it:
+
+- **The state is plain files, not a session.** Quests, leases, gate verdicts and the merge
+  record are files on a bus directory. Kill a worker, close the laptop or reboot, and the next
+  worker picks the quest up from the file. `bin/murder-quest.sh` does this with real `kill -9`s.
+- **The gate is a separate party member that can say no.** The worker does not mark its own
+  work done. The gate refuses with a written reason, the worker reads it and tries again.
+- **The merge happens exactly once.** The commit point is one `ln`, so two workers racing, or a
+  worker killed mid-merge, cannot land the same change twice ([LIMITS.md](LIMITS.md)).
+- **The spend is capped before a call starts, not after.** See below.
+- **Nothing is hidden in a context window.** You can `ls` the bus mid-run and see who holds
+  what.
+
+The cost of that: more moving parts than one session, and file-level coordination instead of
+in-memory messages. For a quick task in one sitting, one session is simpler.
+
+## What it costs
+
+- **The demos and the test suite cost nothing.** `bin/hello-party.sh`, `bin/murder-quest.sh`
+  and `tests/run-all.sh` never call a model or the network.
+- **A live run is refused unless you opt in** (`INNKEEPER_LIVE=1` plus a ledger file), and it
+  stops starting new model calls at a ceiling: `INNKEEPER_LIVE_MAX_USD`, default `$3.00`.
+- **The one recorded live run cost $0.9569 over 2 model calls.** One run is a sample, not a
+  price list; your quest, model and turn limit change it.
+- The ceiling is checked between calls, so the last call can go past it. Leave headroom.
+  The exact guarantees and their conditions are in [LIMITS.md](LIMITS.md).
+- Billing follows your own `claude` login. Read the API-key note at the top before automating.
+
 ## Requirements
 
 `bash`, `git`, `python3`, `jq`, `gitleaks` (the port-gate battery reports CANNOT-RUN without it,
