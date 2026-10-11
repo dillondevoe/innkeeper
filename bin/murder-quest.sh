@@ -108,9 +108,21 @@ check "the quest still reads as claimed"        "$(bash "$QUEST" field rescue-th
 check "nothing was merged"                      "$(bash "$MERGE" status rescue-the-cat)"      "UNMERGED"
 check "a partial is on disk and is not a result" "$(find "$SANDBOX/work/rescue-the-cat" -name '*.part' | wc -l | tr -d ' ')" "1"
 
-say "   ...the lease goes stale, and $B takes over"
+# THE WATCHMAN SCENE. Nobody tells the party that $A died: there is no announcement, because
+# the dead do not announce. The Watchman (bin/watchman.sh) is a plain script that keeps looking
+# while the paid roles are idle, and it is what notices. It costs nothing to run (no model,
+# no network), it wakes the Innkeeper ONCE per change rather than on every look, and it never
+# reassigns the quest itself; that is the Innkeeper's call.
+WATCHMAN="$REPO/bin/watchman.sh"
+say "   ...nobody heard it die. The Watchman keeps looking (no model, costs nothing)"
+w=$(bash "$WATCHMAN" once); echo "   watchman: $w"
+check "while the lease is still fresh, the Watchman stays quiet" "$w" "quiet"
 sleep 3
+w=$(bash "$WATCHMAN" once); echo "   watchman: $w"
+check "the Watchman noticed the dead worker"    "$(printf '%s' "$w" | cut -d' ' -f1-3)" "WAKE stale-lease rescue-the-cat"
 check "the dead holder's lease is stale"        "$(PARTY_BRAIN=$A bash "$LEASE" status | cut -d' ' -f1)" "STALE"
+check "it woke the Innkeeper once, not on every look" "$(bash "$WATCHMAN" once)" "quiet"
+echo "   the Innkeeper reads the Watchman's note and hands the quest to $B"
 bash "$QUEST" release rescue-the-cat >/dev/null
 bash "$QUEST" claim rescue-the-cat "$B" >/dev/null
 ( worker "$B" rescue-the-cat "the cat, rescued by the second worker" clean ) >/dev/null 2>&1
@@ -118,6 +130,7 @@ check "the takeover merged it"                  "$(bash "$MERGE" status rescue-t
 check "credited to the worker that finished it" "$(bash "$MERGE" status rescue-the-cat | sed -n 's/.*by=\([^ ]*\).*/\1/p')" "$B"
 check "exactly one result exists"               "$(ls "$SANDBOX/state/merged"/rescue-the-cat.out* | wc -l | tr -d ' ')" "1"
 check "the quest is closed"                     "$(bash "$QUEST" field rescue-the-cat state)" "done"
+check "and the Watchman's note clears"          "$(bash "$WATCHMAN" once)" "CLEARED stale-lease rescue-the-cat"
 
 say "ACT 2 — a worker is killed AFTER it commits, before it could say so"
 bash "$QUEST" new mend-the-roof --title "Patch the roof before the rain" \

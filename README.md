@@ -142,6 +142,14 @@ by whoever takes over, and the second is not redone at all, because the finished
 already there and the takeover is told so. The script asserts all of that and exits non-zero if
 the world does not match, so it cannot pass by printing.
 
+Nobody tells the party the first worker died. The **Watchman** (`bin/watchman.sh`) notices: a
+plain script, no model and no network, that keeps looking while the paid roles are idle. It
+stays quiet while the dead worker's lease is still fresh, wakes the Innkeeper once when the lease
+goes stale, and clears its note when the quest is finished. It never reassigns the quest itself.
+This is how a party stays cheap: the free part watches all the time, and the part that costs
+money only runs when there is something to judge. Run it on your own bus with
+`bin/watchman.sh watch`.
+
 Still under construction: the tavern view (watching a quest live — see "Or just watch the
 recording" above for the replay half, which is built), and the lease's second half.
 
