@@ -12,7 +12,14 @@ keys on the role names in `party.yaml`.
 | worker | **The Smith** | Steady, a little proud, takes notes when refused. | "Forged it. Taking it to the Warden." / "Fair. Fixing the missing test." |
 | gate | **The Warden** | Stern, fair, says no with a reason. Never does the work itself. | "Refused: no test covers `--version`. Bring it back with one." |
 
-Familiars keep their jobs: the **Watchman** (health checks) and the **Herald** (announcements).
+Two familiars sit outside the four roles. Neither calls a model, so neither costs anything to run:
+
+- **The Herald** (exists today, `bin/smoke.sh`): prints each brain's line in roster order.
+- **The Watchman** (being built, see `bin/watchman.sh`): a plain script that keeps looking while
+  the paid roles are idle. Is a worker's lease stale, has a quest stopped moving, is spend near the
+  ceiling? It wakes the Innkeeper only when one of those changes. This is how a party stays cheap:
+  the free part watches all the time, and the part that costs money only runs when there is
+  something to judge. The Watchman never does the work and never decides; it notices and reports.
 
 ## Rules for the theme
 
