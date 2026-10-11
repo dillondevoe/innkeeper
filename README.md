@@ -47,7 +47,7 @@ A toy or unfinished:
   names are labels that nothing consumes. Only the `claude` CLI is wired as a backend.
 - No installer and no release tag yet.
 - The test batteries share repo-level `state/`, so they cannot run in parallel (see below).
-- Not built: replay, the tavern view, the lease's second half.
+- Not built: the tavern view (watching a quest live, not just a recording), the lease's second half.
 - The live worker is granted `--permission-mode acceptEdits` with tools `Read,Edit,Write,Glob,Grep`
   (no Bash). A hostile prompt could still modify files in the working directory it is given. Do
   not widen this to skip permissions.
@@ -77,6 +77,17 @@ No model is called, nothing leaves the machine, nothing outside the sandbox is w
 the sandbox is removed on exit (`--keep` to inspect it). The refusal is not decoration: with
 the worker's first attempt made correct, the run FAILS rather than passing quietly, and
 `tests/bin-hello-party-selftest.sh` asserts exactly that.
+
+### Or just watch the recording
+
+No clone, no terminal, no login:
+
+![a recorded quest: posted, claimed, refused, fixed, passed, merged, done](replay/recorded-quest.gif)
+
+That GIF, and the `replay/index.html` page it's a recording of, are both built from
+`fixtures/recorded-quest.json` — a literal capture of one real `bin/hello-party.sh` run, not a
+mockup. `bin/record-quest.sh` makes the fixture, `bin/render-replay.sh` makes the page;
+`tests/bin-record-quest-selftest.sh` fails the suite if either one drifts from a fresh run.
 
 ```sh
 bin/smoke.sh
@@ -131,6 +142,7 @@ by whoever takes over, and the second is not redone at all, because the finished
 already there and the takeover is told so. The script asserts all of that and exits non-zero if
 the world does not match, so it cannot pass by printing.
 
-Still under construction: replay, the tavern view, and the lease's second half.
+Still under construction: the tavern view (watching a quest live — see "Or just watch the
+recording" above for the replay half, which is built), and the lease's second half.
 
 MIT. See [LICENSE](LICENSE).
