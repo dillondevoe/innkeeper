@@ -3,207 +3,207 @@
   "recorded_rc": 0,
   "events": [
     {
-      "t": 0.33,
+      "t": 0.35,
       "line": ""
     },
     {
-      "t": 0.33,
+      "t": 0.35,
       "line": "\u001b[1m0. A tool that needs a version flag\u001b[0m"
     },
     {
-      "t": 0.44,
-      "line": "   work repo: /var/folders/cl/5jhv_8wd6c58m_06g9sw5qxh0000gn/T//hello-party.SANDBOX/work  (a real git repo, inside the sandbox)"
+      "t": 0.38,
+      "line": "   work repo: $TMPDIR/hello-party.SANDBOX/work  (a real git repo, inside the sandbox)"
     },
     {
-      "t": 0.45,
+      "t": 0.38,
       "line": "   today it answers: hello, tavern"
     },
     {
-      "t": 0.45,
+      "t": 0.39,
       "line": "   and --version:   [hello, tavern]  <- it ignores the flag entirely. That is the job."
     },
     {
-      "t": 0.45,
+      "t": 0.39,
       "line": ""
     },
     {
-      "t": 0.45,
+      "t": 0.39,
       "line": "\u001b[1m1. The quest is posted\u001b[0m"
     },
     {
-      "t": 0.54,
+      "t": 0.44,
       "line": "   version-flag: state=open"
     },
     {
-      "t": 0.54,
+      "t": 0.44,
       "line": ""
     },
     {
-      "t": 0.54,
+      "t": 0.44,
       "line": "\u001b[1m2. A worker claims it -- under a lease, so a second one would stand down\u001b[0m"
     },
     {
-      "t": 0.59,
+      "t": 0.47,
       "line": "   lease: CLAIMED 00000000-0000-0000-0000-000000000000"
     },
     {
-      "t": 0.64,
+      "t": 0.5,
       "line": "   a second instance of the same worker stands down: HELD-BY-OTHER age=0"
     },
     {
-      "t": 0.82,
+      "t": 0.64,
       "line": "   version-flag: state=claimed lane=worker"
     },
     {
-      "t": 0.82,
+      "t": 0.64,
       "line": ""
     },
     {
-      "t": 0.82,
+      "t": 0.64,
       "line": "\u001b[1m3. The researcher reads the tool and briefs the worker\u001b[0m"
     },
     {
-      "t": 0.83,
+      "t": 0.65,
       "line": "   researcher: the tool declares NO version anywhere. A --version flag therefore needs two"
     },
     {
-      "t": 0.83,
+      "t": 0.65,
       "line": "   things, not one: a version value to print, and a branch that prints it. A flag added"
     },
     {
-      "t": 0.83,
+      "t": 0.65,
       "line": "   without the value prints an empty line and still exits 0, which looks like success."
     },
     {
-      "t": 0.83,
+      "t": 0.65,
       "line": ""
     },
     {
-      "t": 0.83,
+      "t": 0.65,
       "line": "\u001b[1m4. The worker does the work -- attempt 1\u001b[0m"
     },
     {
-      "t": 0.9,
+      "t": 0.67,
       "line": "   commit SHA: add a --version flag"
     },
     {
-      "t": 0.9,
+      "t": 0.67,
       "line": ""
     },
     {
-      "t": 0.9,
+      "t": 0.67,
       "line": "\u001b[1m5. The gate checks it -- by RUNNING the tool, not by reading the diff\u001b[0m"
     },
     {
-      "t": 0.91,
+      "t": 0.68,
       "line": "   NO `tool.sh --version` exited 0 but printed NOTHING. The flag is wired up and has"
     },
     {
-      "t": 0.91,
+      "t": 0.68,
       "line": "      no value to print, so it succeeds while telling the user nothing. Give it a"
     },
     {
-      "t": 0.91,
+      "t": 0.68,
       "line": "      version string and print that."
     },
     {
-      "t": 0.91,
+      "t": 0.68,
       "line": "   -> REFUSED. This is the step the whole quest exists to show."
     },
     {
-      "t": 0.91,
+      "t": 0.68,
       "line": ""
     },
     {
-      "t": 0.91,
+      "t": 0.68,
       "line": "\u001b[1m6. The worker reads the refusal and fixes it -- attempt 2\u001b[0m"
     },
     {
-      "t": 0.98,
+      "t": 0.7,
       "line": "   commit SHA: give --version a version to print (gate refused: it printed nothing)"
     },
     {
-      "t": 0.98,
+      "t": 0.7,
       "line": ""
     },
     {
-      "t": 0.98,
+      "t": 0.7,
       "line": "\u001b[1m7. The gate checks again\u001b[0m"
     },
     {
-      "t": 1.0,
+      "t": 0.71,
       "line": "   PASS `tool.sh --version` prints: 0.1.0"
     },
     {
-      "t": 1.0,
+      "t": 0.71,
       "line": ""
     },
     {
-      "t": 1.0,
+      "t": 0.71,
       "line": "\u001b[1m8. The result merges -- exactly once\u001b[0m"
     },
     {
-      "t": 1.13,
-      "line": "   MERGED /var/folders/cl/5jhv_8wd6c58m_06g9sw5qxh0000gn/T//hello-party.SANDBOX/state/merged/version-flag.out"
+      "t": 0.81,
+      "line": "   MERGED $TMPDIR/hello-party.SANDBOX/state/merged/version-flag.out"
     },
     {
-      "t": 1.27,
-      "line": "   a second merge is refused: ALREADY-MERGED /var/folders/cl/5jhv_8wd6c58m_06g9sw5qxh0000gn/T//hello-party.SANDBOX/state/merged/version-flag.out by=worker"
+      "t": 0.91,
+      "line": "   a second merge is refused: ALREADY-MERGED $TMPDIR/hello-party.SANDBOX/state/merged/version-flag.out by=worker"
     },
     {
-      "t": 1.28,
+      "t": 0.91,
       "line": ""
     },
     {
-      "t": 1.28,
+      "t": 0.91,
       "line": "\u001b[1m9. The quest closes\u001b[0m"
     },
     {
-      "t": 1.38,
+      "t": 0.99,
       "line": "   version-flag: state=done"
     },
     {
-      "t": 1.42,
+      "t": 1.01,
       "line": ""
     },
     {
-      "t": 1.42,
+      "t": 1.01,
       "line": "\u001b[1m10. The voice tells you\u001b[0m"
     },
     {
-      "t": 1.44,
+      "t": 1.02,
       "line": ""
     },
     {
-      "t": 1.44,
+      "t": 1.02,
       "line": "Your quest \"version-flag\" is done."
     },
     {
-      "t": 1.44,
+      "t": 1.02,
       "line": ""
     },
     {
-      "t": 1.44,
+      "t": 1.02,
       "line": "  The tool now answers --version with: 0.1.0"
     },
     {
-      "t": 1.44,
+      "t": 1.02,
       "line": "  The party made 2 commits to get there: the gate refused the first one."
     },
     {
-      "t": 1.44,
-      "line": "  The result was merged once, to: /var/folders/cl/5jhv_8wd6c58m_06g9sw5qxh0000gn/T//hello-party.SANDBOX/state/merged/version-flag.out"
+      "t": 1.02,
+      "line": "  The result was merged once, to: $TMPDIR/hello-party.SANDBOX/state/merged/version-flag.out"
     },
     {
-      "t": 1.44,
+      "t": 1.02,
       "line": ""
     },
     {
-      "t": 1.44,
+      "t": 1.02,
       "line": "Nothing else on your machine was touched."
     },
     {
-      "t": 1.44,
+      "t": 1.02,
       "line": "(sandbox removed; --keep to inspect it)"
     }
   ]

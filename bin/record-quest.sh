@@ -34,10 +34,13 @@ trap 'rm -f "$TMP"' EXIT
 # the committed fixture an unreproducible artifact (a fresh `bin/record-quest.sh` would always
 # diff from the last commit in review). Normalize the random suffix to a fixed placeholder so
 # the fixture reflects the quest's STRUCTURE, which is what replay and --check both care about.
+# The temp ROOT is per-host too ($TMPDIR is /var/folders/.../T/ on macOS, /tmp on Linux), so the
+# whole prefix up to the sandbox name is replaced, not just the suffix: a fixture recorded on a
+# Mac must still match a fresh run in Linux CI.
 python3 - "$REPO/bin/hello-party.sh" > "$TMP" <<'PY'
 import re, subprocess, sys, time, json
 
-SANDBOX_RE = re.compile(r"hello-party\.[A-Za-z0-9]{6,}")
+SANDBOX_RE = re.compile(r"[^\s'\"]*/hello-party\.[A-Za-z0-9]{6,}")
 UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 COMMIT_RE = re.compile(r"\bcommit [0-9a-f]{7,40}\b")
 
@@ -45,7 +48,7 @@ def normalize(line):
     # Three more per-run randoms, same reasoning as the sandbox path above: the lease
     # nonce (a uuid4) and each worker commit hash differ every run with nothing else
     # changed, so they'd read as drift too if left in.
-    line = SANDBOX_RE.sub("hello-party.SANDBOX", line)
+    line = SANDBOX_RE.sub("$TMPDIR/hello-party.SANDBOX", line)
     line = UUID_RE.sub("00000000-0000-0000-0000-000000000000", line)
     line = COMMIT_RE.sub("commit SHA", line)
     return line

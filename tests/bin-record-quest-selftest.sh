@@ -17,7 +17,7 @@ REPO=$(cd "$HERE/.." && pwd -P)
 FIXTURE="$REPO/fixtures/recorded-quest.json"
 REPLAY="$REPO/replay/index.html"
 
-EXPECT_ARMS=7
+EXPECT_ARMS=8
 fails=0
 arms=0
 ok()  { arms=$((arms+1)); echo "  $1 — PASS"; }
@@ -49,6 +49,20 @@ else
   sed 's/^/    /' /tmp/record-quest-check.$$
 fi
 rm -f /tmp/record-quest-check.$$
+
+# A4b: HOST PORTABILITY. The fixture was recorded on one host; CI is another, with a different
+# temp root ($TMPDIR is /var/folders/.../T/ on macOS, /tmp on Linux). Re-run --check under a
+# temp root that is neither, so a fixture that baked in its recorder's temp path fails here on
+# EVERY host, not only on the one that differs from the recorder. Pre-fix, main was red in CI
+# for exactly this: a Mac-recorded fixture against a Linux run.
+ALT_TMP=$(mktemp -d)
+if TMPDIR="$ALT_TMP/elsewhere.d" sh -c 'mkdir -p "$TMPDIR" && exec bash "$1" --check' _ "$REPO/bin/record-quest.sh" >"$ALT_TMP/out" 2>&1; then
+  ok "A4b fixture matches a fresh run under a different temp root (host-portable)"
+else
+  bad "A4b fixture depends on the recording host's temp root"
+  sed 's/^/    /' "$ALT_TMP/out"
+fi
+rm -rf "$ALT_TMP"
 
 # A5: MUTATION CONTROL. Copy the repo, change one printed line in hello-party.sh, then run
 # --check from the COPY against the ORIGINAL committed fixture. --check must report DRIFT —
