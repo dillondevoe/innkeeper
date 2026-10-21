@@ -54,7 +54,13 @@ for t in "$DIR"/*-selftest.sh; do
     printf '  %-9s %s\n' "GREEN" "$b"; green=$((green + 1))
   else
     printf '  %-9s %s\n' "RED" "$b"; red=$((red + 1))
-    printf '%s\n' "$out" | command grep -E '^(FAIL|  FAIL)' | sed 's/^/            /'
+    # A RED must say WHY. This matched the leading form only (`FAIL W3 ...`), and 9 of the 22
+    # batteries put the verdict at the END of the line (`  W3 the arm — FAIL`) — so those nine
+    # printed their name and nothing else, and the reason the battery had already computed was
+    # thrown away. Same shape as the loop this runner replaced: the check ran and its result was
+    # discarded. Matched anywhere on the line now; a stray prose line on an already-red battery
+    # is a far cheaper error than a red with no cause.
+    printf '%s\n' "$out" | command grep -E 'FAIL' | sed 's/^/            /'
   fi
 done
 

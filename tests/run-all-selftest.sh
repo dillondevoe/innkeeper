@@ -6,7 +6,7 @@
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd -P)
 RUNNER=${RUNALL_IMPL:-$HERE/run-all.sh}
-EXPECT_ARMS=9
+EXPECT_ARMS=10
 T=$(mktemp -d); trap 'chmod -R u+rw "$T" 2>/dev/null; rm -rf "$T"' EXIT
 n=0 pass=0
 arm() { n=$((n + 1)); if printf '%s' "$2" | command grep -Eq -- "$3"; then pass=$((pass + 1));
@@ -19,6 +19,10 @@ mkfix() { # dir, then names:state...
     case $state in
       green)  printf '#!/usr/bin/env bash\nexit 0\n' > "$d/$name-selftest.sh" ;;
       red)    printf '#!/usr/bin/env bash\necho "FAIL X1-the-arm-that-failed"\nexit 1\n' > "$d/$name-selftest.sh" ;;
+      # Two reporting styles live in this suite and the runner must read BOTH. 9 of the 22
+      # batteries end the line with the verdict ("  W3 the arm — FAIL") instead of leading
+      # with it, and a runner keyed on the leading form prints their name and no reason.
+      redsuf) printf '#!/usr/bin/env bash\necho "  X2-the-suffix-arm — FAIL"\nexit 1\n' > "$d/$name-selftest.sh" ;;
       cannot) printf '#!/usr/bin/env bash\necho "CANNOT-RUN: the widget is not installed" >&2\nexit 3\n' > "$d/$name-selftest.sh" ;;
       broken) printf '#!/usr/bin/env bash\nif then fi\n' > "$d/$name-selftest.sh" ;;
     esac
@@ -38,6 +42,14 @@ arm R1b-CONTROL-and-says-so           "$(RUN "$T/ok" 2)"   'suite: 2/2 batteries
 mkfix "$T/red" a:green b:red c:green
 arm R2-one-red-battery-fails-the-suite "$(RC "$T/red" 3)"  '^rc=[1-9]'
 arm R2b-and-the-failing-arm-is-shown   "$(RUN "$T/red" 3)" 'X1-the-arm-that-failed'
+
+# R2c -- and it is shown for EITHER reporting style. R2b's fixture leads with the verdict;
+# 9 of this suite's 22 batteries END with it, and the runner used to match only the leading
+# form. The cost is not cosmetic: a red battery printed its name and nothing else, so the
+# reason existed and was discarded, and the only way back to it was a hand re-run. That is
+# how bin-watchman went red on mirror/watchman with no stated cause on 2026-10-19.
+mkfix "$T/reds" a:green b:redsuf
+arm R2c-a-suffix-style-reason-is-shown "$(RUN "$T/reds" 2)" 'X2-the-suffix-arm'
 
 # R3 -- THE ARM THAT MATTERS MOST. Every battery present is green; one was deleted. A suite that
 # discovers its members by glob is all-green by construction once a file goes missing, so without
