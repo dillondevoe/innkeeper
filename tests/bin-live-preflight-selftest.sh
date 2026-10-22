@@ -115,7 +115,7 @@ done
 # about whether it was allowed to call the model.
 if [ ! -e "$LEDGER" ]; then
   ok "L6-preflight-never-executed-the-CLI"
-else bad "L6-preflight-never-executed-the-CLI" "it ran it $(wc -l < "$LEDGER") time(s): $(cat "$LEDGER")"; fi
+else bad "L6-preflight-never-executed-the-CLI" "it ran it $(wc -l < "$LEDGER" | tr -d ' ') time(s): $(cat "$LEDGER")"; fi
 
 # --- L6b: ...and the arm above is capable of failing --------------------------------------
 # Without this, L6 also passes on a stub that was never installed, a ledger path that no

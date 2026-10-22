@@ -65,7 +65,7 @@ CALLS="$TMP/c1.calls"
 OUT=$(env INNKEEPER_LIVE= "INNKEEPER_CLAUDE=$TMP/claude" "STUB_CALLS=$CALLS" \
       bash "$REPO/roles/claude-worker.sh" "$T" first 2>&1); RC=$?
 if [ "$RC" -ne 0 ] && [ ! -f "$CALLS" ]; then ok "C1-no-opt-in-means-the-role-never-calls-the-CLI"
-else bad "C1-no-opt-in-means-the-role-never-calls-the-CLI" "rc=$RC calls=$([ -f "$CALLS" ] && wc -l < "$CALLS" || echo 0)"; fi
+else bad "C1-no-opt-in-means-the-role-never-calls-the-CLI" "rc=$RC calls=$([ -f "$CALLS" ] && wc -l < "$CALLS" | tr -d ' ' || echo 0)"; fi
 
 # --- C1b: THE SUBSTRATE ARM for C1 -------------------------------------------------------
 # C1 asserts an ABSENCE, and an absence assertion passes for free if the recorder never
@@ -81,7 +81,13 @@ else bad "C1b-the-recorder-does-record-a-real-call" "rc=$RC out=[$OUT]"; fi
 # --- C2: one call, one ledger line, naming the role and the cost -------------------------
 LED="$TMP/c2.tsv"; T="$TMP/c2"; mktoy "$T"
 env "${BASEENV[@]}" "INNKEEPER_LEDGER=$LED" bash "$REPO/roles/claude-worker.sh" "$T" first >/dev/null 2>&1
-if [ "$(wc -l < "$LED" 2>/dev/null || echo 0)" = 1 ] && grep -q $'\tworker\t0.0125$' "$LED"; then
+# `wc -l` PADS on macOS ("       1"), so a bare string compare is RED on every Mac with a
+# perfectly correct ledger. `tr -d ' '` is this tree's idiom for it already — every other count
+# comparison in tests/ and bin/ has it; this line was the one that drifted.
+# Counted into a variable rather than inline: `wc ... | tr ... || echo 0` would hang the `||` on
+# TR's status, not wc's, so a missing ledger would yield "" and the fallback would be dead code.
+C2N=$(wc -l < "$LED" 2>/dev/null | tr -d ' ')
+if [ "${C2N:-0}" = 1 ] && grep -q $'\tworker\t0.0125$' "$LED"; then
   ok "C2-one-call-writes-one-ledger-line-with-role-and-cost"
 else bad "C2-one-call-writes-one-ledger-line-with-role-and-cost" "ledger=[$(cat "$LED" 2>/dev/null)]"; fi
 
