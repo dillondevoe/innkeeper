@@ -23,7 +23,16 @@ chk() { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1: got [$2] want [$3]"; fi;
 
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 export INNKEEPER_HOME="$W" INNKEEPER_BUS="$W/bus" INNKEEPER_QUESTS="$W/quests"
-export INNKEEPER_PARTY="$R/party.yaml" LEASE_TTL=1
+# THE TTL IS THE ARMS' TIME BUDGET, AND AT 1 IT WAS SUB-SECOND. W2 asserts that a LIVE holder is
+# not reported, so it is correct only while the claim and the look land inside the same whole second:
+# lease.sh ages a lock on an INTEGER awake clock (/proc/uptime truncated) and calls it stale at
+# `age >= TTL`, so with TTL=1 any rollover between the two makes a lease claimed 40ms ago read STALE
+# and W2 fail. Measured on dellon: the claim-to-look gap is ~41ms, i.e. a ~4% chance per run of
+# crossing the boundary on an IDLE box, and worse on a loaded one. 5 makes the margin two orders of
+# magnitude larger than the work it has to cover; W3 waits past it rather than relying on the gap.
+# This is NOT a named cause for the suite flake (not reproduced in 11 full-suite runs, 8 under 2x CPU
+# oversubscription, or 35 earlier solo runs) -- it is a latent race removed on its own merits.
+export INNKEEPER_PARTY="$R/party.yaml" LEASE_TTL=5
 mkdir -p "$W/bus" "$W/quests" "$W/state"
 unset INNKEEPER_LEDGER
 LANE=$(bash "$R/bus/actor.sh" lanes | sed -n 1p)
@@ -40,7 +49,7 @@ NONCE=$(PARTY_BRAIN=$LANE bash "$R/lifecycle/lease.sh" claim); NONCE=${NONCE#CLA
 chk "W2 a live holder is not reported" "$(look)" "quiet"
 
 # W3: the holder dies (its lease goes stale): reported, once, with the quest named.
-sleep 2
+sleep 6
 out=$(look)
 case "$out" in "WAKE stale-lease q1 quest=q1 holder=$LANE"*) ok "W3 a dead holder is reported";;
   *) bad "W3 a dead holder is reported: got [$out]";; esac
