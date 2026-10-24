@@ -26,8 +26,8 @@ SANDBOX_RE = re.compile(r"[^\s'\"]*/hello-party\.[A-Za-z0-9]{6,}")
 UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 COMMIT_RE = re.compile(r"\bcommit [0-9a-f]{7,40}\b")
 
-# THE LEASE AGE. lifecycle/lease.sh ages a lock on an INTEGER awake clock (int of
-# /proc/uptime), so the age it prints is a whole number of seconds. hello-party.sh claims the
+# THE LEASE AGE. lifecycle/lease.sh ages a lock in WHOLE seconds (on Linux, int of
+# /proc/uptime; on Darwin, CLOCK_UPTIME_RAW), so the age it prints is a whole number of seconds. hello-party.sh claims the
 # lease and then immediately claims it again to show the second instance standing down, and
 # those two clock reads are ~26ms apart (measured on dellon, 5 runs) -- so the printed age is
 # `age=0` unless the pair happens to straddle a one-second rollover, and then it is `age=1`.
@@ -40,6 +40,11 @@ COMMIT_RE = re.compile(r"\bcommit [0-9a-f]{7,40}\b")
 # by the same argument as the nonce beside it. Flattening it does not weaken the check: a
 # refusal that stopped happening at all would change `HELD-BY-OTHER` itself, which is still
 # compared verbatim.
+# STATED LIMIT: on a host with NO awake clock, lease.sh appends a `[no awake clock on this
+# host: ...]` note to the same line, and nothing here flattens it, so A4 reads DRIFT there.
+# Deliberately left: that note is a real warning to whoever runs the demo, and the fixture
+# narrating its absence would be the fixture lying about such a host. Reproduce with
+# LEASE_UPTIME_FILE=/nonexistent LEASE_PYTHON=/nonexistent bin/record-quest.sh --check.
 AGE_RE = re.compile(r"\bage=\d+")
 
 

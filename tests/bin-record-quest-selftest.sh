@@ -173,7 +173,9 @@ if [ $? -eq 0 ]; then arms=$((arms+3)); else arms=$((arms+3)); fails=$((fails+1)
 # recorded line, which is the shape where a unit arm and an integration arm are each green and
 # the bug is in the join. So force the boundary crossing in a COPY of the repo (lease.sh made
 # to report age+1, i.e. what it prints when the two claims straddle a rollover) and run the
-# real `--check` against the real committed fixture.
+# real `--check`. Note what it compares against: record-quest.sh finds its fixture by its own
+# location, so inside the copy that is the copy of THIS CHECKOUT's fixture (working tree, not
+# HEAD). A4 is what pins the checkout's fixture to a fresh run; A8 pins the boundary case.
 #
 # A8b is the control: the SAME forced copy with the age rule removed must DRIFT. Without it,
 # A8 would also pass on a --check that had stopped comparing lines at all.
@@ -198,8 +200,8 @@ if strip == "1":
 PY
 }
 
-B8=$(mktemp -d)
-if force_boundary "$B8" 0 2>"$B8/setup.err"; then
+B8=$(mktemp -d) && [ -n "$B8" ] || { bad "A8 SETUP: mktemp failed"; B8=; }
+if [ -n "$B8" ] && force_boundary "$B8" 0 2>"$B8/setup.err"; then
   if bash "$B8/bin/record-quest.sh" --check >"$B8/out" 2>&1; then
     ok "A8 a run that straddles a one-second lease rollover is NOT drift (end to end)"
   else
@@ -209,20 +211,25 @@ if force_boundary "$B8" 0 2>"$B8/setup.err"; then
 else
   bad "A8 SETUP: could not force the boundary crossing"; sed 's/^/    /' "$B8/setup.err"
 fi
-rm -rf "$B8"
+[ -n "$B8" ] && rm -rf "$B8"
 
-B8B=$(mktemp -d)
-if force_boundary "$B8B" 1 2>"$B8B/setup.err"; then
+B8B=$(mktemp -d) && [ -n "$B8B" ] || { bad "A8b SETUP: mktemp failed"; B8B=; }
+if [ -n "$B8B" ] && force_boundary "$B8B" 1 2>"$B8B/setup.err"; then
   if bash "$B8B/bin/record-quest.sh" --check >"$B8B/out" 2>&1; then
     bad "A8b CONTROL: with the age rule removed a boundary-crossing run passed — --check is inert"
     sed 's/^/    /' "$B8B/out"
-  else
+  elif grep -q '^DRIFT' "$B8B/out"; then
     ok "A8b CONTROL: with the age rule removed the same run DOES drift (the defect was real)"
+  else
+    # A nonzero exit that is NOT drift (an import error, a crashed quest) compared nothing, and
+    # reading it as the control firing would make an inert --check look armed.
+    bad "A8b CONTROL: --check failed for a reason other than DRIFT — it compared nothing"
+    sed 's/^/    /' "$B8B/out"
   fi
 else
   bad "A8b SETUP: could not force the boundary crossing"; sed 's/^/    /' "$B8B/setup.err"
 fi
-rm -rf "$B8B"
+[ -n "$B8B" ] && rm -rf "$B8B"
 
 if [ "$arms" -ne "$EXPECT_ARMS" ]; then
   echo "ARM COUNT: ran $arms, expected $EXPECT_ARMS — an arm was skipped or added."
