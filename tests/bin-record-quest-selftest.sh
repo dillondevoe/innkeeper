@@ -17,7 +17,7 @@ REPO=$(cd "$HERE/.." && pwd -P)
 FIXTURE="$REPO/fixtures/recorded-quest.json"
 REPLAY="$REPO/replay/index.html"
 
-EXPECT_ARMS=8
+EXPECT_ARMS=13
 fails=0
 arms=0
 ok()  { arms=$((arms+1)); echo "  $1 — PASS"; }
@@ -107,6 +107,129 @@ print("  A6 FAIL: fixture has %d events, replay page embeds %d" % (n_fixture, le
 sys.exit(1)
 PY
 [ $? -eq 0 ] && arms=$((arms+1)) || { arms=$((arms+1)); fails=$((fails+1)); }
+
+# A7/A7b/A7c: THE NORMALIZATION RULES ARE LIVE, AND THEY FLATTEN THE LEASE AGE.
+#
+# This is the arm the intermittent red on this battery was missing. lifecycle/lease.sh prints
+# a lock's age in WHOLE seconds off an integer awake clock, and hello-party.sh claims the lease
+# twice ~26ms apart to show the second instance standing down -- so `age=0` nearly always, and
+# `age=1` whenever that pair straddles a one-second rollover. A4 then reported DRIFT with no
+# other cause, which is why it was green every time it was run by hand and red occasionally
+# inside run-all.sh. Measured both directions against a fake clock (lease.sh takes
+# LEASE_UPTIME_FILE): 100.90 -> age=0, 101.05 -> age=1, same lock.
+#
+# A7 asserts the rule collapses it. A7b is the PRE-FIX arm: it applies the OTHER three rules
+# only and asserts the two readings still differ -- without it, A7 would pass on a normalize()
+# that returned a constant, and nothing would show the defect was ever real. A7c is the control
+# in the other direction: the version number, the commit COUNT and the step numbers are what
+# the quest is ASSERTING, so a rule that ate them would be worse than the flake it fixed.
+python3 -B - "$REPO/bin" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+import quest_normalize as qn
+
+held0 = "   a second instance of the same worker stands down: HELD-BY-OTHER age=0"
+held1 = "   a second instance of the same worker stands down: HELD-BY-OTHER age=1"
+fails = 0
+
+if qn.normalize(held0) == qn.normalize(held1) and "age=" in qn.normalize(held0):
+    print("  A7 PASS: a lease age of 0 and of 1 normalize to the same line")
+else:
+    print("  A7 FAIL: the lease age is not flattened — %r vs %r"
+          % (qn.normalize(held0), qn.normalize(held1)))
+    fails += 1
+
+def without_age(line):
+    line = qn.SANDBOX_RE.sub("$TMPDIR/hello-party.SANDBOX", line)
+    line = qn.UUID_RE.sub("00000000-0000-0000-0000-000000000000", line)
+    return qn.COMMIT_RE.sub("commit SHA", line)
+
+if without_age(held0) != without_age(held1):
+    print("  A7b PASS: PRE-FIX arm — without the age rule the same lock reads as drift")
+else:
+    print("  A7b FAIL: PRE-FIX arm did not fire; this battery cannot show the defect was real")
+    fails += 1
+
+load_bearing = [
+    "  The tool now answers --version with: 0.1.0",
+    "  The party made 2 commits to get there: the gate refused the first one.",
+    "   PASS `tool.sh --version` prints: 0.1.0",
+]
+untouched = [l for l in load_bearing if qn.normalize(l) == l]
+if len(untouched) == len(load_bearing):
+    print("  A7c PASS: CONTROL — the version, the commit count and the step text are untouched")
+else:
+    for l in load_bearing:
+        if qn.normalize(l) != l:
+            print("  A7c FAIL: a rule ate text the quest is asserting: %r -> %r" % (l, qn.normalize(l)))
+    fails += 1
+
+sys.exit(1 if fails else 0)
+PY
+if [ $? -eq 0 ]; then arms=$((arms+3)); else arms=$((arms+3)); fails=$((fails+1)); fi
+
+# A8/A8b: THE TWO HALVES ACTUALLY MEET. A7 proves the rule flattens an age and A4 proves the
+# committed fixture matches a fresh run -- but both can pass while the rule never reaches the
+# recorded line, which is the shape where a unit arm and an integration arm are each green and
+# the bug is in the join. So force the boundary crossing in a COPY of the repo (lease.sh made
+# to report age+1, i.e. what it prints when the two claims straddle a rollover) and run the
+# real `--check`. Note what it compares against: record-quest.sh finds its fixture by its own
+# location, so inside the copy that is the copy of THIS CHECKOUT's fixture (working tree, not
+# HEAD). A4 is what pins the checkout's fixture to a fresh run; A8 pins the boundary case.
+#
+# A8b is the control: the SAME forced copy with the age rule removed must DRIFT. Without it,
+# A8 would also pass on a --check that had stopped comparing lines at all.
+force_boundary() { # force_boundary <dest> <strip-age-rule:0|1>
+  cp -R "$REPO"/. "$1"/
+  python3 - "$1/lifecycle/lease.sh" "$1/bin/quest_normalize.py" "$2" <<'PY'
+import sys
+lease, norm, strip = sys.argv[1], sys.argv[2], sys.argv[3]
+t = open(lease).read()
+old = 'echo "HELD-BY-OTHER age=$age$(awake_clock_note)"'
+if t.count(old) != 1:
+    sys.stderr.write("SETUP: expected exactly one HELD-BY-OTHER print, found %d\n" % t.count(old))
+    sys.exit(2)
+open(lease, "w").write(t.replace(old, 'echo "HELD-BY-OTHER age=$((age+1))$(awake_clock_note)"'))
+if strip == "1":
+    s = open(norm).read()
+    rule = '    line = AGE_RE.sub("age=N", line)\n'
+    if rule not in s:
+        sys.stderr.write("SETUP: the age rule is not where this arm expects it\n")
+        sys.exit(2)
+    open(norm, "w").write(s.replace(rule, ""))
+PY
+}
+
+B8=$(mktemp -d) && [ -n "$B8" ] || { bad "A8 SETUP: mktemp failed"; B8=; }
+if [ -n "$B8" ] && force_boundary "$B8" 0 2>"$B8/setup.err"; then
+  if bash "$B8/bin/record-quest.sh" --check >"$B8/out" 2>&1; then
+    ok "A8 a run that straddles a one-second lease rollover is NOT drift (end to end)"
+  else
+    bad "A8 a boundary-crossing run still reports DRIFT — the flake is not fixed on the real path"
+    sed 's/^/    /' "$B8/out"
+  fi
+else
+  bad "A8 SETUP: could not force the boundary crossing"; sed 's/^/    /' "$B8/setup.err"
+fi
+[ -n "$B8" ] && rm -rf "$B8"
+
+B8B=$(mktemp -d) && [ -n "$B8B" ] || { bad "A8b SETUP: mktemp failed"; B8B=; }
+if [ -n "$B8B" ] && force_boundary "$B8B" 1 2>"$B8B/setup.err"; then
+  if bash "$B8B/bin/record-quest.sh" --check >"$B8B/out" 2>&1; then
+    bad "A8b CONTROL: with the age rule removed a boundary-crossing run passed — --check is inert"
+    sed 's/^/    /' "$B8B/out"
+  elif grep -q '^DRIFT' "$B8B/out"; then
+    ok "A8b CONTROL: with the age rule removed the same run DOES drift (the defect was real)"
+  else
+    # A nonzero exit that is NOT drift (an import error, a crashed quest) compared nothing, and
+    # reading it as the control firing would make an inert --check look armed.
+    bad "A8b CONTROL: --check failed for a reason other than DRIFT — it compared nothing"
+    sed 's/^/    /' "$B8B/out"
+  fi
+else
+  bad "A8b SETUP: could not force the boundary crossing"; sed 's/^/    /' "$B8B/setup.err"
+fi
+[ -n "$B8B" ] && rm -rf "$B8B"
 
 if [ "$arms" -ne "$EXPECT_ARMS" ]; then
   echo "ARM COUNT: ran $arms, expected $EXPECT_ARMS — an arm was skipped or added."
