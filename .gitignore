@@ -9,3 +9,9 @@ state/
 bus/.mut-*
 lifecycle/.mut-*
 bus/.plant-probe.sh
+
+# Bytecode. bin/quest_normalize.py is the repo's first importable module, so a python3 that
+# writes caches would drop bin/__pycache__/ into a checkout the first time the demo runs. The
+# two call sites that import it pass -B so nothing is written at all; this is the belt, for an
+# import that arrives by some other route.
+__pycache__/
