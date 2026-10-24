@@ -1,0 +1,17 @@
+Innkeeper
+Copyright (c) 2026 Dillon DeVoe. Licensed under the MIT License (see LICENSE).
+
+Innkeeper is an independent project. It is NOT affiliated with, endorsed by, or sponsored by
+Anthropic PBC.
+
+"Claude" and "Claude Code" are trademarks of Anthropic PBC. They are used here only to describe
+what this tool runs, under nominative fair use, and no claim is made to them.
+
+The `claude` CLI is NOT vendored, bundled or redistributed by this repository. Install it
+yourself from Anthropic; this repository contains only code and configuration that shells out
+to whatever `claude` binary and login you already have. Innkeeper never reads, stores or
+forwards credentials.
+
+Automating the `claude` CLI may be subject to Anthropic's terms, which are theirs and not ours.
+See "Before you run anything live" in README.md, and read the current terms at
+https://www.anthropic.com/legal yourself.
