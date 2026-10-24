@@ -6,7 +6,7 @@
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd -P)
 RUNNER=${RUNALL_IMPL:-$HERE/run-all.sh}
-EXPECT_ARMS=10
+EXPECT_ARMS=11
 T=$(mktemp -d); trap 'chmod -R u+rw "$T" 2>/dev/null; rm -rf "$T"' EXIT
 n=0 pass=0
 arm() { n=$((n + 1)); if printf '%s' "$2" | command grep -Eq -- "$3"; then pass=$((pass + 1));
@@ -23,6 +23,10 @@ mkfix() { # dir, then names:state...
       # batteries end the line with the verdict ("  W3 the arm — FAIL") instead of leading
       # with it, and a runner keyed on the leading form prints their name and no reason.
       redsuf) printf '#!/usr/bin/env bash\necho "  X2-the-suffix-arm — FAIL"\nexit 1\n' > "$d/$name-selftest.sh" ;;
+      # A failing arm that prints its EVIDENCE on the lines after the verdict. Several do:
+      # bin-record-quest's A4 pipes the whole `--check` diff out beneath its FAIL line, which
+      # is the only thing that says what drifted.
+      redev)  printf '#!/usr/bin/env bash\necho "  X3-the-arm-with-evidence — FAIL"\necho "    -was: forty-two"\necho "    +now: forty-three"\nexit 1\n' > "$d/$name-selftest.sh" ;;
       cannot) printf '#!/usr/bin/env bash\necho "CANNOT-RUN: the widget is not installed" >&2\nexit 3\n' > "$d/$name-selftest.sh" ;;
       broken) printf '#!/usr/bin/env bash\nif then fi\n' > "$d/$name-selftest.sh" ;;
     esac
@@ -50,6 +54,17 @@ arm R2b-and-the-failing-arm-is-shown   "$(RUN "$T/red" 3)" 'X1-the-arm-that-fail
 # how bin-watchman went red on mirror/watchman with no stated cause on 2026-10-19.
 mkfix "$T/reds" a:green b:redsuf
 arm R2c-a-suffix-style-reason-is-shown "$(RUN "$T/reds" 2)" 'X2-the-suffix-arm'
+
+# R2d -- A REASON WITHOUT ITS EVIDENCE IS STILL A RED WITH NO CAUSE. R2b/R2c got the arm's NAME
+# out, and the next layer down was discarded the same way: the runner printed only the lines
+# containing FAIL, so an arm that computes a diff and prints it UNDERNEATH its verdict had that
+# diff thrown away. Measured on 2026-10-24: bin-record-quest went red in a full-suite run with
+# "A4 committed fixture has DRIFTED from a fresh run" and not one line of what had drifted, while
+# the battery run alone was green 15 times -- so the one run that held the answer was the one run
+# whose answer the runner dropped. Same shape as the loop this runner replaced, two levels in: the
+# result was computed and then discarded.
+mkfix "$T/redev" a:green b:redev
+arm R2d-a-failing-arms-evidence-is-shown "$(RUN "$T/redev" 2)" '\-was: forty-two'
 
 # R3 -- THE ARM THAT MATTERS MOST. Every battery present is green; one was deleted. A suite that
 # discovers its members by glob is all-green by construction once a file goes missing, so without
