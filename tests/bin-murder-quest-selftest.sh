@@ -34,7 +34,7 @@ chk K4-no-failed-checks "$(command grep -c 'FAIL' "$O")" 0
 # The count is matched against the ESCAPE, not the word: `ok` appears in prose and the check
 # marker is colour-wrapped, so a bare grep for "ok" counted 0 here on the first run and would
 # have counted noise on the next.
-chk K5-every-check-ran "$(command grep -c $'\033\[32mok' "$O")" 15
+chk K5-every-check-ran "$(command grep -c $'\033\[32mok' "$O")" 19
 has K6-act-one-present "$O" 'killed BEFORE it commits'
 has K7-act-two-present "$O" 'killed AFTER it commits'
 has K8-exactly-once-claimed "$O" 'merged exactly once'

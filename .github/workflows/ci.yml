@@ -46,5 +46,5 @@ jobs:
           echo "$RUNNER_TEMP/gl" >> "$GITHUB_PATH"
       - name: Run the suite (one at a time; batteries share state/)
         env:
-          INNKEEPER_EXPECT_BATTERIES: "21"
+          INNKEEPER_EXPECT_BATTERIES: "22"
         run: bash tests/run-all.sh
