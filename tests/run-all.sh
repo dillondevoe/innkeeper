@@ -61,6 +61,14 @@ for t in "$DIR"/*-selftest.sh; do
     # discarded. Matched anywhere on the line now; a stray prose line on an already-red battery
     # is a far cheaper error than a red with no cause.
     printf '%s\n' "$out" | command grep -E 'FAIL' | sed 's/^/            /'
+    # AND THEN THE SAME DEFECT ONE LAYER DOWN. Matching the FAIL lines gets the arm's NAME out and
+    # discards everything the arm printed BENEATH it -- which for bin-record-quest's A4 is the whole
+    # `--check` diff, i.e. the only statement of what actually drifted. A red suite is rare and is
+    # being read by someone trying to diagnose it, so the entire transcript goes out rather than a
+    # guess at how far below its verdict an arm's evidence sits: an assumption about the shape of
+    # another battery's output is what cost us the reason twice already.
+    echo "            --- $b, in full ---"
+    printf '%s\n' "$out" | sed 's/^/            /'
   fi
 done
 
