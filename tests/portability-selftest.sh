@@ -51,8 +51,10 @@ ban readlink-f-is-gnu-only 'readlink[[:space:]]+-f' \
   'readlink -f is GNU; macOS readlink has no -f. Use cd + pwd -P.'
 ban date-d-is-gnu-only     'date[[:space:]]+(-u[[:space:]]+)?-d[[:space:]]' \
   'date -d is GNU; BSD date uses -v/-j -f. Prefer epoch arithmetic.'
+ban realpath-m-is-gnu-only 'realpath[[:space:]]+(-[a-zA-Z]*)?m([[:space:]]|$)' \
+  'realpath -m is GNU; macOS realpath has only -q and errors "illegal option -- m". Use abspath_m (python3 os.path.realpath).'
 
-EXPECT_ARMS=${INNKEEPER_EXPECT_PORT_ARMS:-7}
+EXPECT_ARMS=${INNKEEPER_EXPECT_PORT_ARMS:-8}
 echo "portability-selftest: $((arms-fails))/$arms passed (expected $EXPECT_ARMS arms)"
 [ "$arms" = "$EXPECT_ARMS" ] || { echo "  FAIL arm count: ran $arms, expected $EXPECT_ARMS" >&2; exit 1; }
 [ "$fails" = 0 ]
