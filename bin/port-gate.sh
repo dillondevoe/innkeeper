@@ -71,10 +71,15 @@ if ! printf '%s\n' "$rules" | command grep -q "^name	"; then
   echo "CANNOT-ASSESS - forbidden list has no \`name\` rules; the address-name check would be vacuous"; exit 2
 fi
 
+# GNU realpath -m resolves what exists and appends what does not. macOS realpath (26.x) has only -q and
+# errors "illegal option -- m", which failed all 22 arms of this gate's battery on the Air (2026-10-29).
+# python3 is already a requirement and os.path.realpath has the same contract, symlinks included.
+abspath_m() { python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$1"; }
+
 # 1. Wall: judged on the source PATH, before anything is opened.
 # Judged on the path as given AND as resolved, so a symlink or relative path cannot launder it.
 if [ -n "$SRC" ]; then
-  srcreal=$(realpath -m -- "$SRC")
+  srcreal=$(abspath_m "$SRC")
   while IFS=$'\t' read -r cls re; do
     [ "$cls" = wall ] || continue
     if printf '%s\n%s\n' "$SRC" "$srcreal" | command grep -Eqi -- "$re"; then
@@ -88,7 +93,7 @@ bump() { [ "$1" -gt "$worst" ] && worst=$1; }
 
 judge() {
   local dest=$1 abs rel hit=0
-  abs=$(realpath -m -- "$dest")
+  abs=$(abspath_m "$dest")
   case "$abs" in "$REPO"/*) rel=${abs#"$REPO"/} ;; *) echo "REFUSED outside-repo $dest"; bump 1; return ;; esac
   if [ ! -r "$abs" ] || [ -d "$abs" ]; then echo "CANNOT-ASSESS $rel unreadable"; bump 2; return; fi
   if [ ! -s "$abs" ]; then echo "CANNOT-ASSESS $rel zero-line file; an empty scan is not a clean one"; bump 2; return; fi
