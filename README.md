@@ -79,7 +79,7 @@ A toy or unfinished:
   recorded.
 - The roster in `party.yaml` is flat; the "class" names (cleric, squire...) and per-seat model
   names are labels that nothing consumes. Only the `claude` CLI is wired as a backend.
-- No installer and no release tag yet.
+- No installer yet; the current release tag is `v0.1.0-alpha`.
 - The test batteries share repo-level `state/`, so they cannot run in parallel (see below).
 - Not built: the tavern view (watching a quest live, not just a recording), the lease's second half.
 - The live worker is granted `--permission-mode acceptEdits` with tools `Read,Edit,Write,Glob,Grep`
