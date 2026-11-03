@@ -89,9 +89,10 @@ arm R2-crlf-list             1 '^FORBIDDEN host ' -- env INNKEEPER_FORBIDDEN=$T/
 mkdir -p "$T"/zorblax; ln -s "$T"/zorblax "$T"/alias
 arm W2-wall-via-symlink      1 '^REFUSED wall ' -- GS --source "$T/alias/x.sh" "$R/docs/clean.md"
 arm W3-source-required       2 'CANNOT-ASSESS .*--source' -- GS "$R/docs/clean.md"
-# `--source ""` set SRC empty, and the wall check is guarded by `[ -n "$SRC" ]` -- so an empty
-# source skipped the wall exactly as an omitted one would have, behind a flag that looked
-# supplied. Same for `--source` with no value at all. Both must refuse, not judge.
+# ONE BYPASS, ONE MESSAGE. W4: `--source ""` set SRC empty, and the wall check is guarded by
+# `[ -n "$SRC" ]` -- so the gate returned PASS rc 0 with the wall never consulted, behind a flag
+# that looked supplied. W5 was NOT a bypass: a bare `--source` already exited 2 via usage(); the
+# arm pins that it now names the empty path instead of printing usage.
 arm W4-empty-source-refused   2 'CANNOT-ASSESS - --source was given an empty path' -- GS --source "" "$R/docs/clean.md"
 arm W5-valueless-source-refused 2 'CANNOT-ASSESS - --source was given an empty path' -- GS --source
 mkdir -p "$R"/lifecycle; cp "$T"/green "$R"/tests/deploy-selftest.sh
