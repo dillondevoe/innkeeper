@@ -44,7 +44,13 @@ usage() { echo "usage: port-gate.sh --source SRC | --no-source  DEST..." >&2; ex
 
 SRC= NOSRC=
 case "${1:-}" in
-  --source) [ $# -ge 2 ] || usage; SRC=$2; shift 2 ;;
+  # An empty SRC would skip the wall below (it is guarded by `[ -n "$SRC" ]`), so `--source ""`
+  # or a bare `--source` is the omitted-source case in disguise and is refused the same way.
+  --source)
+    if [ $# -lt 2 ] || [ -z "$2" ]; then
+      echo "CANNOT-ASSESS - --source was given an empty path; name the file this came from, or pass --no-source for a file authored in place"; exit 2
+    fi
+    SRC=$2; shift 2 ;;
   --no-source) NOSRC=1; shift ;;
   -*|'') usage ;;
   *) echo "CANNOT-ASSESS - no --source given; pass --source SRC, or --no-source for a file authored in place"; exit 2 ;;
