@@ -3,87 +3,270 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
 <title>Innkeeper — recorded quest replay</title>
 <style>
-  :root { --bg: #0b0d10; --fg: #d8dee4; --dim: #6b7380; --accent: #58d68d; }
+  :root {
+    color-scheme: dark;
+    --bg: #0e1116; --panel: #151a21; --term: #06080b; --btn: #1d232c; --line: #6b7684;
+    --fg: #e8ebef; --dim: #a7b0bc; --focus: #ffd166;
+    --worker: #7cc4ff; --researcher: #d4a8ff; --gate: #ffb454; --voice: #5fe0b0; --inn: #a7b0bc;
+    --no: #ff9a9a; --no-bg: #2b1013; --ok: #7fe08f; --ok-bg: #0d2416;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  }
   * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--bg); color: var(--fg);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    display: flex; flex-direction: column; align-items: center; padding: 24px 16px;
-  }
-  h1 { font-size: 15px; color: var(--dim); font-weight: 400; margin: 0 0 14px; }
-  h1 code { color: var(--accent); }
-  #term {
-    width: 100%; max-width: 760px; min-height: 420px; background: #000;
-    border: 1px solid #22262c; border-radius: 8px; padding: 18px 20px;
-    white-space: pre-wrap; font-size: 13px; line-height: 1.55; overflow-y: auto;
-  }
-  #term strong { color: var(--accent); font-weight: 600; }
-  #controls { margin-top: 14px; display: flex; gap: 10px; }
-  button {
-    background: #1b1f26; color: var(--fg); border: 1px solid #2c313a; border-radius: 6px;
-    padding: 7px 16px; font-family: inherit; font-size: 13px; cursor: pointer;
-  }
-  button:hover { background: #262b33; }
-  button:disabled { opacity: 0.4; cursor: default; }
-  #caption { margin-top: 10px; color: var(--dim); font-size: 12px; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 24px 16px 40px; }
+  h1 { font-size: 1.5rem; line-height: 1.25; margin: 0 0 6px; }
+  h2 { font-size: 1rem; margin: 0 0 10px; }
+  p { margin: 0 0 10px; }
+  .lede { color: var(--dim); max-width: 70ch; }
+  code, kbd { font-family: var(--mono); font-size: .9em; }
+  kbd { border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; }
+  .grid { display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr); margin-top: 18px; }
+  @media (min-width: 900px) { .grid { grid-template-columns: minmax(0, 1fr) 320px; } }
+  .panel { background: var(--panel); border-radius: 10px; padding: 16px; }
+  #status { height: 3em; overflow: hidden; margin: 0 0 10px; font-weight: 600; display: flex; gap: 10px; align-items: flex-start; }
+  #status .vd { flex: none; }
+  #term { height: min(60vh, 520px); overflow-y: auto; background: var(--term); border: 1px solid var(--line);
+    border-radius: 8px; padding: 12px 0; font: 14px/1.6 var(--mono); }
+  #term ol { list-style: none; margin: 0; padding: 0; }
+  .ln { white-space: pre-wrap; overflow-wrap: anywhere; min-height: 1.6em; padding: 0 14px 0 12px; border-left: 4px solid transparent; }
+  .ln.r-worker { border-left-color: var(--worker); } .ln.r-researcher { border-left-color: var(--researcher); }
+  .ln.r-gate { border-left-color: var(--gate); } .ln.r-voice { border-left-color: var(--voice); }
+  .ln.k-heading { margin-top: 4px; }
+  .ln strong { font-weight: 700; }
+  .ln.k-no { background: var(--no-bg); color: var(--no); }
+  .ln.k-pass, .ln.fix.k-commit { background: var(--ok-bg); color: var(--ok); }
+  .ln.k-merge, .ln.k-lease, .ln.k-state, .ln.k-commit { color: var(--dim); }
+  .ln.k-merge { color: var(--ok); }
+  .who, .vd { display: inline-block; font: 700 11px/1.6 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .06em;
+    border: 1px solid currentColor; border-radius: 4px; padding: 0 5px; margin-right: 8px; vertical-align: 1px; }
+  .r-worker .who, .who.r-worker, .step.r-worker .num { color: var(--worker); }
+  .who.r-researcher, .step.r-researcher .num { color: var(--researcher); }
+  .who.r-gate, .step.r-gate .num { color: var(--gate); }
+  .who.r-voice, .step.r-voice .num { color: var(--voice); }
+  .who.r-inn, .step.r-inn .num { color: var(--inn); }
+  .vd.no { color: var(--no); background: var(--no-bg); } .vd.pass { color: var(--ok); background: var(--ok-bg); }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; align-items: center; }
+  button, select { background: var(--btn); color: var(--fg); border: 1px solid var(--line); border-radius: 6px;
+    min-height: 44px; padding: 0 14px; font: inherit; font-size: .95rem; cursor: pointer; }
+  button:hover, select:hover { background: #262d38; }
+  #playBtn { min-width: 6.5em; font-weight: 700; }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .scrub { display: flex; gap: 12px; align-items: center; margin-top: 12px; }
+  .scrub input { flex: 1; min-width: 0; height: 44px; accent-color: var(--gate); margin: 0; }
+  #caption { flex: none; min-width: 9.5em; text-align: right; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .pace { display: flex; gap: 8px; align-items: center; margin-left: auto; color: var(--dim); }
+  #steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+  .step { width: 100%; text-align: left; display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px;
+    background: transparent; border-color: transparent; line-height: 1.35; }
+  .step .num { flex: none; width: 1.8em; font: 700 .95rem/1.35 var(--mono); }
+  .step[aria-current="step"] { background: var(--btn); border-color: var(--line); }
+  .step.later { color: var(--dim); }
+  .legend { margin: 0; display: grid; gap: 8px; }
+  .legend dt { font-weight: 700; } .legend dd { margin: 0 0 4px; color: var(--dim); }
+  .panel + .panel { margin-top: 20px; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  footer { margin-top: 24px; color: var(--dim); font-size: .9rem; }
+  @media (max-width: 520px) { #term { font-size: 13px; } #status { height: 4.5em; } .pace { margin-left: 0; } }
+  @media (max-width: 360px) { #status { height: 6em; } }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
 </style>
 </head>
 <body>
-<h1>Recorded quest &mdash; a canned run of <code>bin/hello-party.sh</code>, replayed at its own pace. No model call, no login, no cost.</h1>
-<div id="term"></div>
-<div id="controls">
-  <button id="playBtn">Play</button>
-  <button id="restartBtn">Restart</button>
+<div class="wrap">
+<header>
+  <h1>A recorded quest, replayed</h1>
+  <p class="lede">A captured run of <code>bin/hello-party.sh</code>: four party members add a <code>--version</code> flag to a tiny tool. Watch step 5 &mdash; the gate runs the tool, refuses the first attempt, and the worker fixes it. No model call, no login, no cost.</p>
+</header>
+<div class="grid">
+<main class="panel">
+  <h2 class="sr" id="nowLabel">Now showing</h2>
+  <p id="status" aria-live="polite"></p>
+  <div id="term" tabindex="0" role="region" aria-label="Quest transcript"><ol>
+<li id="l0" class="ln k-blank r-inn" data-step="-1"> </li>
+<li id="l1" class="ln k-heading r-inn" data-step="0"><span class="who r-inn">inn</span><strong>0. A tool that needs a version flag</strong></li>
+<li id="l2" class="ln k-text r-inn" data-step="0">   work repo: $TMPDIR/hello-party.SANDBOX/work  (a real git repo, inside the sandbox)</li>
+<li id="l3" class="ln k-text r-inn" data-step="0">   today it answers: hello, tavern</li>
+<li id="l4" class="ln k-text r-inn" data-step="0">   and --version:   [hello, tavern]  &lt;- it ignores the flag entirely. That is the job.</li>
+<li id="l5" class="ln k-blank r-inn" data-step="0"> </li>
+<li id="l6" class="ln k-heading r-inn" data-step="1"><span class="who r-inn">inn</span><strong>1. The quest is posted</strong></li>
+<li id="l7" class="ln k-state r-inn" data-step="1">   version-flag: state=open</li>
+<li id="l8" class="ln k-blank r-inn" data-step="1"> </li>
+<li id="l9" class="ln k-heading r-worker" data-step="2"><span class="who r-worker">worker</span><strong>2. A worker claims it -- under a lease, so a second one would stand down</strong></li>
+<li id="l10" class="ln k-lease r-worker" data-step="2">   lease: CLAIMED 00000000-0000-0000-0000-000000000000</li>
+<li id="l11" class="ln k-lease r-worker" data-step="2">   a second instance of the same worker stands down: HELD-BY-OTHER age=N</li>
+<li id="l12" class="ln k-state r-worker" data-step="2">   version-flag: state=claimed lane=worker</li>
+<li id="l13" class="ln k-blank r-worker" data-step="2"> </li>
+<li id="l14" class="ln k-heading r-researcher" data-step="3"><span class="who r-researcher">researcher</span><strong>3. The researcher reads the tool and briefs the worker</strong></li>
+<li id="l15" class="ln k-text r-researcher" data-step="3">   researcher: the tool declares NO version anywhere. A --version flag therefore needs two</li>
+<li id="l16" class="ln k-text r-researcher" data-step="3">   things, not one: a version value to print, and a branch that prints it. A flag added</li>
+<li id="l17" class="ln k-text r-researcher" data-step="3">   without the value prints an empty line and still exits 0, which looks like success.</li>
+<li id="l18" class="ln k-blank r-researcher" data-step="3"> </li>
+<li id="l19" class="ln k-heading r-worker" data-step="4"><span class="who r-worker">worker</span><strong>4. The worker does the work -- attempt 1</strong></li>
+<li id="l20" class="ln k-commit r-worker" data-step="4">   commit SHA: add a --version flag</li>
+<li id="l21" class="ln k-blank r-worker" data-step="4"> </li>
+<li id="l22" class="ln k-heading r-gate" data-step="5"><span class="who r-gate">gate</span><strong>5. The gate checks it -- by RUNNING the tool, not by reading the diff</strong></li>
+<li id="l23" class="ln k-no r-gate" data-step="5">   NO `tool.sh --version` exited 0 but printed NOTHING. The flag is wired up and has</li>
+<li id="l24" class="ln k-no r-gate" data-step="5">      no value to print, so it succeeds while telling the user nothing. Give it a</li>
+<li id="l25" class="ln k-no r-gate" data-step="5">      version string and print that.</li>
+<li id="l26" class="ln k-no r-gate" data-step="5">   -&gt; REFUSED. This is the step the whole quest exists to show.</li>
+<li id="l27" class="ln k-blank r-gate" data-step="5"> </li>
+<li id="l28" class="ln k-heading r-worker fix" data-step="6"><span class="who r-worker">worker</span><strong>6. The worker reads the refusal and fixes it -- attempt 2</strong></li>
+<li id="l29" class="ln k-commit r-worker fix" data-step="6">   commit SHA: give --version a version to print (gate refused: it printed nothing)</li>
+<li id="l30" class="ln k-blank r-worker fix" data-step="6"> </li>
+<li id="l31" class="ln k-heading r-gate" data-step="7"><span class="who r-gate">gate</span><strong>7. The gate checks again</strong></li>
+<li id="l32" class="ln k-pass r-gate" data-step="7">   PASS `tool.sh --version` prints: 0.1.0</li>
+<li id="l33" class="ln k-blank r-gate" data-step="7"> </li>
+<li id="l34" class="ln k-heading r-inn" data-step="8"><span class="who r-inn">inn</span><strong>8. The result merges -- exactly once</strong></li>
+<li id="l35" class="ln k-merge r-inn" data-step="8">   MERGED $TMPDIR/hello-party.SANDBOX/state/merged/version-flag.out</li>
+<li id="l36" class="ln k-merge r-inn" data-step="8">   a second merge is refused: ALREADY-MERGED $TMPDIR/hello-party.SANDBOX/state/merged/version-flag.out by=worker</li>
+<li id="l37" class="ln k-blank r-inn" data-step="8"> </li>
+<li id="l38" class="ln k-heading r-inn" data-step="9"><span class="who r-inn">inn</span><strong>9. The quest closes</strong></li>
+<li id="l39" class="ln k-state r-inn" data-step="9">   version-flag: state=done</li>
+<li id="l40" class="ln k-blank r-inn" data-step="9"> </li>
+<li id="l41" class="ln k-heading r-voice" data-step="10"><span class="who r-voice">voice</span><strong>10. The voice tells you</strong></li>
+<li id="l42" class="ln k-blank r-voice" data-step="10"> </li>
+<li id="l43" class="ln k-text r-voice" data-step="10">Your quest &quot;version-flag&quot; is done.</li>
+<li id="l44" class="ln k-blank r-voice" data-step="10"> </li>
+<li id="l45" class="ln k-text r-voice" data-step="10">  The tool now answers --version with: 0.1.0</li>
+<li id="l46" class="ln k-text r-voice" data-step="10">  The party made 2 commits to get there: the gate refused the first one.</li>
+<li id="l47" class="ln k-text r-voice" data-step="10">  The result was merged once, to: $TMPDIR/hello-party.SANDBOX/state/merged/version-flag.out</li>
+<li id="l48" class="ln k-blank r-voice" data-step="10"> </li>
+<li id="l49" class="ln k-text r-voice" data-step="10">Nothing else on your machine was touched.</li>
+<li id="l50" class="ln k-text r-voice" data-step="10">(sandbox removed; --keep to inspect it)</li>
+  </ol></div>
+  <div class="controls" role="group" aria-label="Playback">
+    <button type="button" id="playBtn" aria-keyshortcuts="Space">Play</button>
+    <button type="button" id="prevBtn" aria-keyshortcuts="ArrowLeft">&larr; Prev step</button>
+    <button type="button" id="nextBtn" aria-keyshortcuts="ArrowRight">Next step &rarr;</button>
+    <button type="button" id="restartBtn">Restart</button>
+    <label class="pace">Pace <select id="pace"><option value="story">Story</option><option value="recorded">Recorded (0.75 s)</option></select></label>
+  </div>
+  <div class="scrub">
+    <input type="range" id="scrub" min="0" max="51" step="1" value="51" aria-label="Position in transcript, in lines">
+    <span id="caption">51 / 51 lines</span>
+  </div>
+</main>
+<aside>
+  <nav class="panel" aria-labelledby="stepsH"><h2 id="stepsH">Steps</h2><ol id="steps">
+<li><button type="button" class="step r-inn" data-step="0"><span class="num">0</span><span class="st">A tool that needs a version flag</span></button></li>
+<li><button type="button" class="step r-inn" data-step="1"><span class="num">1</span><span class="st">The quest is posted</span></button></li>
+<li><button type="button" class="step r-worker" data-step="2"><span class="num">2</span><span class="st">A worker claims it -- under a lease, so a second one would stand down</span></button></li>
+<li><button type="button" class="step r-researcher" data-step="3"><span class="num">3</span><span class="st">The researcher reads the tool and briefs the worker</span></button></li>
+<li><button type="button" class="step r-worker" data-step="4"><span class="num">4</span><span class="st">The worker does the work -- attempt 1</span></button></li>
+<li><button type="button" class="step r-gate" data-step="5"><span class="num">5</span><span class="st">The gate checks it -- by RUNNING the tool, not by reading the diff <span class="vd no">refused</span></span></button></li>
+<li><button type="button" class="step r-worker" data-step="6"><span class="num">6</span><span class="st">The worker reads the refusal and fixes it -- attempt 2</span></button></li>
+<li><button type="button" class="step r-gate" data-step="7"><span class="num">7</span><span class="st">The gate checks again <span class="vd pass">pass</span></span></button></li>
+<li><button type="button" class="step r-inn" data-step="8"><span class="num">8</span><span class="st">The result merges -- exactly once</span></button></li>
+<li><button type="button" class="step r-inn" data-step="9"><span class="num">9</span><span class="st">The quest closes</span></button></li>
+<li><button type="button" class="step r-voice" data-step="10"><span class="num">10</span><span class="st">The voice tells you</span></button></li>
+  </ol></nav>
+  <section class="panel" aria-labelledby="whoH"><h2 id="whoH">Who&rsquo;s at the table</h2><dl class="legend">
+    <dt><span class="who r-worker">worker</span></dt><dd>Claims the quest under a lease and makes the change as a real git commit.</dd>
+    <dt><span class="who r-researcher">researcher</span></dt><dd>Reads the tool itself and briefs the worker on what the change needs.</dd>
+    <dt><span class="who r-gate">gate</span></dt><dd>Runs the tool and says PASS or NO, with a reason the worker can act on. It is not the worker, so it can refuse.</dd>
+    <dt><span class="who r-voice">voice</span></dt><dd>Tells you the outcome, with every number read back from git and the disk.</dd>
+    <dt><span class="who r-inn">inn</span></dt><dd>Not a member: the files on disk &mdash; the job board, the lease and the merge record.</dd>
+  </dl></section>
+  <section class="panel" aria-labelledby="whatH"><h2 id="whatH">What the lines mean</h2><dl class="legend">
+    <dt><code>state=open | claimed | done</code></dt><dd>The quest&rsquo;s file on the job board moved to that state.</dd>
+    <dt><code>CLAIMED</code> / <code>HELD-BY-OTHER</code></dt><dd>A lease was taken; a second claimant saw it held and stood down.</dd>
+    <dt><code>commit</code></dt><dd>The worker committed an attempt (green: the fix after a refusal).</dd>
+    <dt><span class="vd no">no</span> <code>NO &hellip; REFUSED</code></dt><dd>The gate refused the attempt and wrote why.</dd>
+    <dt><span class="vd pass">pass</span> <code>PASS</code></dt><dd>The gate ran the tool and the check held.</dd>
+    <dt><code>MERGED</code> / <code>ALREADY-MERGED</code></dt><dd>The result landed once; a second merge was refused.</dd>
+  </dl></section>
+</aside>
 </div>
-<div id="caption">0 / 0 lines</div>
+<footer>
+  <p>Keys (with the transcript or page focused): <kbd>Space</kbd> play/pause, <kbd>&larr;</kbd>/<kbd>&rarr;</kbd> previous/next step, <kbd>Home</kbd>/<kbd>End</kbd> start/end. The slider steps one line at a time.</p>
+  <p>Built by <code>bin/render-replay.sh</code> from <code>fixtures/recorded-quest.json</code>. With reduced motion requested, the replay does not start on its own and opens on the full transcript.</p>
+</footer>
+</div>
 <script>
-const EVENTS = [{"t": 0.22, "html": ""}, {"t": 0.22, "html": "<strong>0. A tool that needs a version flag</strong>"}, {"t": 0.24, "html": "   work repo: $TMPDIR/hello-party.SANDBOX/work  (a real git repo, inside the sandbox)"}, {"t": 0.24, "html": "   today it answers: hello, tavern"}, {"t": 0.24, "html": "   and --version:   [hello, tavern]  &lt;- it ignores the flag entirely. That is the job."}, {"t": 0.24, "html": ""}, {"t": 0.24, "html": "<strong>1. The quest is posted</strong>"}, {"t": 0.28, "html": "   version-flag: state=open"}, {"t": 0.28, "html": ""}, {"t": 0.28, "html": "<strong>2. A worker claims it -- under a lease, so a second one would stand down</strong>"}, {"t": 0.3, "html": "   lease: CLAIMED 00000000-0000-0000-0000-000000000000"}, {"t": 0.32, "html": "   a second instance of the same worker stands down: HELD-BY-OTHER age=N"}, {"t": 0.43, "html": "   version-flag: state=claimed lane=worker"}, {"t": 0.43, "html": ""}, {"t": 0.43, "html": "<strong>3. The researcher reads the tool and briefs the worker</strong>"}, {"t": 0.44, "html": "   researcher: the tool declares NO version anywhere. A --version flag therefore needs two"}, {"t": 0.44, "html": "   things, not one: a version value to print, and a branch that prints it. A flag added"}, {"t": 0.44, "html": "   without the value prints an empty line and still exits 0, which looks like success."}, {"t": 0.44, "html": ""}, {"t": 0.44, "html": "<strong>4. The worker does the work -- attempt 1</strong>"}, {"t": 0.45, "html": "   commit SHA: add a --version flag"}, {"t": 0.45, "html": ""}, {"t": 0.45, "html": "<strong>5. The gate checks it -- by RUNNING the tool, not by reading the diff</strong>"}, {"t": 0.46, "html": "   NO `tool.sh --version` exited 0 but printed NOTHING. The flag is wired up and has"}, {"t": 0.46, "html": "      no value to print, so it succeeds while telling the user nothing. Give it a"}, {"t": 0.46, "html": "      version string and print that."}, {"t": 0.46, "html": "   -&gt; REFUSED. This is the step the whole quest exists to show."}, {"t": 0.46, "html": ""}, {"t": 0.46, "html": "<strong>6. The worker reads the refusal and fixes it -- attempt 2</strong>"}, {"t": 0.48, "html": "   commit SHA: give --version a version to print (gate refused: it printed nothing)"}, {"t": 0.48, "html": ""}, {"t": 0.48, "html": "<strong>7. The gate checks again</strong>"}, {"t": 0.49, "html": "   PASS `tool.sh --version` prints: 0.1.0"}, {"t": 0.49, "html": ""}, {"t": 0.49, "html": "<strong>8. The result merges -- exactly once</strong>"}, {"t": 0.6, "html": "   MERGED $TMPDIR/hello-party.SANDBOX/state/merged/version-flag.out"}, {"t": 0.68, "html": "   a second merge is refused: ALREADY-MERGED $TMPDIR/hello-party.SANDBOX/state/merged/version-flag.out by=worker"}, {"t": 0.68, "html": ""}, {"t": 0.68, "html": "<strong>9. The quest closes</strong>"}, {"t": 0.74, "html": "   version-flag: state=done"}, {"t": 0.75, "html": ""}, {"t": 0.75, "html": "<strong>10. The voice tells you</strong>"}, {"t": 0.75, "html": ""}, {"t": 0.75, "html": "Your quest &quot;version-flag&quot; is done."}, {"t": 0.75, "html": ""}, {"t": 0.75, "html": "  The tool now answers --version with: 0.1.0"}, {"t": 0.75, "html": "  The party made 2 commits to get there: the gate refused the first one."}, {"t": 0.75, "html": "  The result was merged once, to: $TMPDIR/hello-party.SANDBOX/state/merged/version-flag.out"}, {"t": 0.75, "html": ""}, {"t": 0.75, "html": "Nothing else on your machine was touched."}, {"t": 0.75, "html": "(sandbox removed; --keep to inspect it)"}];
-const term = document.getElementById('term');
-const playBtn = document.getElementById('playBtn');
-const restartBtn = document.getElementById('restartBtn');
-const caption = document.getElementById('caption');
+const EVENTS = [{"t": 0.22, "step": -1, "kind": "blank"}, {"t": 0.22, "step": 0, "kind": "heading"}, {"t": 0.24, "step": 0, "kind": "text"}, {"t": 0.24, "step": 0, "kind": "text"}, {"t": 0.24, "step": 0, "kind": "text"}, {"t": 0.24, "step": 0, "kind": "blank"}, {"t": 0.24, "step": 1, "kind": "heading"}, {"t": 0.28, "step": 1, "kind": "state"}, {"t": 0.28, "step": 1, "kind": "blank"}, {"t": 0.28, "step": 2, "kind": "heading"}, {"t": 0.3, "step": 2, "kind": "lease"}, {"t": 0.32, "step": 2, "kind": "lease"}, {"t": 0.43, "step": 2, "kind": "state"}, {"t": 0.43, "step": 2, "kind": "blank"}, {"t": 0.43, "step": 3, "kind": "heading"}, {"t": 0.44, "step": 3, "kind": "text"}, {"t": 0.44, "step": 3, "kind": "text"}, {"t": 0.44, "step": 3, "kind": "text"}, {"t": 0.44, "step": 3, "kind": "blank"}, {"t": 0.44, "step": 4, "kind": "heading"}, {"t": 0.45, "step": 4, "kind": "commit"}, {"t": 0.45, "step": 4, "kind": "blank"}, {"t": 0.45, "step": 5, "kind": "heading"}, {"t": 0.46, "step": 5, "kind": "no"}, {"t": 0.46, "step": 5, "kind": "no"}, {"t": 0.46, "step": 5, "kind": "no"}, {"t": 0.46, "step": 5, "kind": "no"}, {"t": 0.46, "step": 5, "kind": "blank"}, {"t": 0.46, "step": 6, "kind": "heading"}, {"t": 0.48, "step": 6, "kind": "commit"}, {"t": 0.48, "step": 6, "kind": "blank"}, {"t": 0.48, "step": 7, "kind": "heading"}, {"t": 0.49, "step": 7, "kind": "pass"}, {"t": 0.49, "step": 7, "kind": "blank"}, {"t": 0.49, "step": 8, "kind": "heading"}, {"t": 0.6, "step": 8, "kind": "merge"}, {"t": 0.68, "step": 8, "kind": "merge"}, {"t": 0.68, "step": 8, "kind": "blank"}, {"t": 0.68, "step": 9, "kind": "heading"}, {"t": 0.74, "step": 9, "kind": "state"}, {"t": 0.75, "step": 9, "kind": "blank"}, {"t": 0.75, "step": 10, "kind": "heading"}, {"t": 0.75, "step": 10, "kind": "blank"}, {"t": 0.75, "step": 10, "kind": "text"}, {"t": 0.75, "step": 10, "kind": "blank"}, {"t": 0.75, "step": 10, "kind": "text"}, {"t": 0.75, "step": 10, "kind": "text"}, {"t": 0.75, "step": 10, "kind": "text"}, {"t": 0.75, "step": 10, "kind": "blank"}, {"t": 0.75, "step": 10, "kind": "text"}, {"t": 0.75, "step": 10, "kind": "text"}];
+const STEPS = [{"n": 0, "title": "A tool that needs a version flag", "verdict": null}, {"n": 1, "title": "The quest is posted", "verdict": null}, {"n": 2, "title": "A worker claims it -- under a lease, so a second one would stand down", "verdict": null}, {"n": 3, "title": "The researcher reads the tool and briefs the worker", "verdict": null}, {"n": 4, "title": "The worker does the work -- attempt 1", "verdict": null}, {"n": 5, "title": "The gate checks it -- by RUNNING the tool, not by reading the diff", "verdict": "no"}, {"n": 6, "title": "The worker reads the refusal and fixes it -- attempt 2", "verdict": null}, {"n": 7, "title": "The gate checks again", "verdict": "pass"}, {"n": 8, "title": "The result merges -- exactly once", "verdict": null}, {"n": 9, "title": "The quest closes", "verdict": null}, {"n": 10, "title": "The voice tells you", "verdict": null}];
+const $ = id => document.getElementById(id);
+const term = $('term'), lines = term.querySelectorAll('.ln'), stepBtns = document.querySelectorAll('.step');
+const playBtn = $('playBtn'), scrub = $('scrub'), caption = $('caption'), status = $('status'), pace = $('pace');
+const N = EVENTS.length;
+const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+// stepEnd[k]: lines visible once step k is fully shown.
+const stepEnd = STEPS.map(s => EVENTS.reduce((end, e, i) => e.step === s.n ? i + 1 : end, 0));
+let idx = 0, playing = false, timer = null, lastStep = null;
 
-let idx = 0, playing = false, timer = null, startWall = 0, startT = 0;
+function curStep() { return idx ? EVENTS[idx - 1].step : -1; }
 
 function render() {
-  term.innerHTML = EVENTS.slice(0, idx).map(e => e.html).join('\n');
+  lines.forEach((li, i) => { li.hidden = i >= idx; });
   term.scrollTop = term.scrollHeight;
-  caption.textContent = idx + ' / ' + EVENTS.length + ' lines';
+  scrub.value = idx;
+  const cur = curStep(), s = STEPS.find(x => x.n === cur);
+  caption.textContent = idx + ' / ' + N + ' lines';
+  scrub.setAttribute('aria-valuetext', 'line ' + idx + ' of ' + N + (s ? ', step ' + s.n : ''));
+  stepBtns.forEach(b => {
+    const n = +b.dataset.step;
+    if (n === cur) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current');
+    b.classList.toggle('later', n > cur);
+  });
+  // Announce once per step, and again when its verdict appears -- not once per line.
+  const shown = s && s.verdict && EVENTS.slice(0, idx).some(e => e.step === cur && e.kind === s.verdict) ? s.verdict : '';
+  const key = cur + shown;
+  if (key !== lastStep) {
+    lastStep = key;
+    status.innerHTML = '';
+    if (!s) { status.textContent = 'Press Play to start the quest.'; return; }
+    if (shown) {
+      const v = document.createElement('span');
+      v.className = 'vd ' + shown; v.textContent = shown === 'no' ? 'refused' : 'pass';
+      status.append(v);
+    }
+    status.append('Step ' + s.n + ' of ' + STEPS[STEPS.length - 1].n + ': ' + s.title);
+  }
 }
 
-function scheduleNext() {
-  if (idx >= EVENTS.length) { playing = false; playBtn.textContent = 'Play'; return; }
-  const target = EVENTS[idx].t;
-  const wait = Math.max(0, (target - startT) * 1000 - (performance.now() - startWall));
-  timer = setTimeout(() => {
-    idx += 1;
-    render();
-    scheduleNext();
-  }, wait);
+// Story pace: slow enough to read, and it holds on the refusal. Recorded pace: the fixture's
+// own timestamps (the whole quest took under a second).
+function delay(i) {
+  if (pace.value === 'recorded') return i ? Math.max(0, (EVENTS[i].t - EVENTS[i - 1].t) * 1000) : 0;
+  const prev = i ? EVENTS[i - 1] : null;
+  if (prev && prev.kind === 'no' && EVENTS[i].kind !== 'no') return 2400;
+  if (prev && prev.kind === 'pass') return 1000;
+  return EVENTS[i].kind === 'heading' ? 700 : 110;
 }
 
+function tick() {
+  if (idx >= N) { pause(); return; }
+  timer = setTimeout(() => { idx += 1; render(); tick(); }, delay(idx));
+}
 function play() {
-  if (idx >= EVENTS.length) { idx = 0; }
-  playing = true;
-  playBtn.textContent = 'Pause';
-  startWall = performance.now();
-  startT = idx < EVENTS.length ? EVENTS[idx].t : 0;
-  scheduleNext();
+  if (idx >= N) { idx = 0; render(); }
+  playing = true; playBtn.textContent = 'Pause'; tick();
 }
-
-function pause() {
-  playing = false;
-  playBtn.textContent = 'Play';
-  clearTimeout(timer);
-}
+function pause() { playing = false; playBtn.textContent = 'Play'; clearTimeout(timer); }
+function seek(i) { pause(); idx = Math.max(0, Math.min(N, i)); render(); }
+function next() { seek(stepEnd.find(e => e > idx) ?? N); }
+function prev() { seek([...stepEnd].reverse().find(e => e < idx) ?? 0); }
 
 playBtn.addEventListener('click', () => { playing ? pause() : play(); });
-restartBtn.addEventListener('click', () => { pause(); idx = 0; render(); play(); });
+$('nextBtn').addEventListener('click', next);
+$('prevBtn').addEventListener('click', prev);
+$('restartBtn').addEventListener('click', () => { seek(0); play(); });
+scrub.addEventListener('input', () => seek(+scrub.value));
+pace.addEventListener('change', () => { if (playing) { clearTimeout(timer); tick(); } });
+stepBtns.forEach((b, k) => b.addEventListener('click', () => seek(stepEnd[k])));
+document.addEventListener('keydown', ev => {
+  const t = ev.target;
+  if (ev.altKey || ev.ctrlKey || ev.metaKey || (t !== document.body && t !== term)) return;
+  const act = { ' ': () => (playing ? pause() : play()), ArrowRight: next, ArrowLeft: prev,
+                Home: () => seek(0), End: () => seek(N) }[ev.key];
+  if (act) { ev.preventDefault(); act(); }
+});
 
-render();
-play();
+if (reduce) { idx = N; render(); } else { idx = 0; render(); play(); }
 </script>
 </body>
 </html>

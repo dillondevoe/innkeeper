@@ -40,7 +40,10 @@ No clone, no terminal, no login:
 That GIF, and the `replay/index.html` page it's a recording of, are both built from
 `fixtures/recorded-quest.json` — a literal capture of one real `bin/hello-party.sh` run, not a
 mockup. `bin/record-quest.sh` makes the fixture, `bin/render-replay.sh` makes the page;
-`tests/bin-record-quest-selftest.sh` fails the suite if either one drifts from a fresh run.
+`tests/bin-record-quest-selftest.sh` fails the suite if either one drifts from a fresh run. The
+page is one self-contained file (no network requests) with play/pause, step, scrub and a legend
+of the four roles; the GIF is a screen capture of that page, taken by hand and not checked by
+the suite.
 
 **Status: alpha. Working prototype, not a product.** Innkeeper is an independent project, not
 affiliated with or endorsed by Anthropic. "Claude" and "Claude Code" are trademarks of Anthropic;

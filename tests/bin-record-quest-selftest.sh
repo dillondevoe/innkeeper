@@ -17,7 +17,7 @@ REPO=$(cd "$HERE/.." && pwd -P)
 FIXTURE="$REPO/fixtures/recorded-quest.json"
 REPLAY="$REPO/replay/index.html"
 
-EXPECT_ARMS=13
+EXPECT_ARMS=17
 fails=0
 arms=0
 ok()  { arms=$((arms+1)); echo "  $1 — PASS"; }
@@ -230,6 +230,71 @@ else
   bad "A8b SETUP: could not force the boundary crossing"; sed 's/^/    /' "$B8B/setup.err"
 fi
 [ -n "$B8B" ] && rm -rf "$B8B"
+
+# A9/A9b: THE COMMITTED PAGE IS A FRESH RENDER OF THE COMMITTED FIXTURE. A6 only counts events,
+# so a page whose markup, labels or player drifted from what render-replay.sh now writes would
+# still pass it. Render twice in a COPY: the two renders must be byte-identical (the render is a
+# pure function of the fixture) and equal to the committed page. A9b is the control: change one
+# fixture line in a copy and the fresh render must DIFFER from the committed page, so A9 cannot
+# pass by comparing a file with itself.
+R9=$(mktemp -d)
+cp -R "$REPO"/. "$R9"/
+if bash "$R9/bin/render-replay.sh" >/dev/null 2>&1 && cp "$R9/replay/index.html" "$R9/first.html" \
+   && bash "$R9/bin/render-replay.sh" >/dev/null 2>&1; then
+  if ! cmp -s "$R9/first.html" "$R9/replay/index.html"; then
+    bad "A9 two renders of the same fixture differ — the render is not deterministic"
+  elif ! cmp -s "$R9/replay/index.html" "$REPLAY"; then
+    bad "A9 committed replay/index.html is not a fresh render of the fixture — run bin/render-replay.sh"
+  else
+    ok "A9 two renders are byte-identical and equal the committed replay/index.html"
+  fi
+else
+  bad "A9 bin/render-replay.sh failed in a copy of the repo"
+fi
+python3 - "$R9/fixtures/recorded-quest.json" <<'PY'
+import json, sys
+p = sys.argv[1]; f = json.load(open(p))
+f["events"][1]["line"] = f["events"][1]["line"].replace("version flag", "version banner")
+json.dump(f, open(p, "w"), indent=2)
+PY
+if bash "$R9/bin/render-replay.sh" >/dev/null 2>&1 && ! cmp -s "$R9/replay/index.html" "$REPLAY" \
+   && grep -q "version banner" "$R9/replay/index.html"; then
+  ok "A9b CONTROL: a changed fixture renders a page that differs from the committed one"
+else
+  bad "A9b CONTROL: a changed fixture did not change the render — A9 compares nothing"
+fi
+rm -rf "$R9"
+
+# A10/A11: THE PAGE'S OWN CONTRACT. A10: one self-contained file — a CSP that forbids external
+# requests, and no URL, external script/stylesheet or network API in the markup. A11: the
+# labelling the page exists for is derived from the fixture, not lost — the gate's refusal and
+# the pass are both marked in the step list and on the transcript lines, the fix step is marked,
+# and the controls the page promises (play, step, scrub, pace, reduced motion) are present.
+python3 - "$REPLAY" <<'PY'
+import json, re, sys
+page = open(sys.argv[1]).read()
+fails = 0
+external = re.findall(r"""(?:https?:)?//[a-z0-9.-]+\.[a-z]{2,}|<link\b|<script\s+[^>]*src=|\bfetch\(|XMLHttpRequest|WebSocket|@import""", page, re.I)
+if "Content-Security-Policy" in page and "default-src 'none'" in page and not external:
+    print("  A10 PASS: self-contained — CSP default-src 'none', no external references")
+else:
+    print("  A10 FAIL: page can make external requests: csp=%s refs=%r"
+          % ("default-src 'none'" in page, external[:5])); fails += 1
+steps = json.loads(re.search(r"const STEPS = (\[.*?\]);\n", page).group(1))
+verdicts = [(s["n"], s["verdict"]) for s in steps if s["verdict"]]
+need = ['id="playBtn"', 'id="prevBtn"', 'id="nextBtn"', 'type="range" id="scrub"', 'aria-label="Position',
+        'id="pace"', "prefers-reduced-motion", 'aria-live="polite"', '<html lang="en">']
+missing = [n for n in need if n not in page]
+if (len(verdicts) == 2 and verdicts[0][1] == "no" and verdicts[1][1] == "pass"
+        and verdicts[0][0] < verdicts[1][0] and "ln k-no r-gate" in page
+        and "ln k-pass r-gate" in page and "r-worker fix" in page and not missing):
+    print("  A11 PASS: refusal (step %d) then pass (step %d) marked; fix step and controls present"
+          % (verdicts[0][0], verdicts[1][0]))
+else:
+    print("  A11 FAIL: verdicts=%r missing=%r" % (verdicts, missing)); fails += 1
+sys.exit(fails)
+PY
+rc=$?; arms=$((arms+2)); [ $rc -eq 0 ] || fails=$((fails+rc))
 
 if [ "$arms" -ne "$EXPECT_ARMS" ]; then
   echo "ARM COUNT: ran $arms, expected $EXPECT_ARMS — an arm was skipped or added."
