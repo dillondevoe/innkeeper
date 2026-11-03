@@ -17,7 +17,7 @@ REPO=$(cd "$HERE/.." && pwd -P)
 FIXTURE="$REPO/fixtures/recorded-quest.json"
 REPLAY="$REPO/replay/index.html"
 
-EXPECT_ARMS=13
+EXPECT_ARMS=19
 fails=0
 arms=0
 ok()  { arms=$((arms+1)); echo "  $1 — PASS"; }
@@ -230,6 +230,100 @@ else
   bad "A8b SETUP: could not force the boundary crossing"; sed 's/^/    /' "$B8B/setup.err"
 fi
 [ -n "$B8B" ] && rm -rf "$B8B"
+
+# A9/A9b/A9c: THE PAGE IS A PURE FUNCTION OF THE FIXTURE. A6 only counts events, so a page that
+# was rendered from an older fixture -- or hand-edited after rendering -- passed it. Render twice
+# into a scratch dir: the two must be byte-identical (A9), the committed page must be byte-identical
+# to them (A9b: the README's "fails the suite if either one drifts"), and a one-word change to a
+# COPY of the fixture must change the render (A9c: the control; without it A9b passes on a renderer
+# that ignores its input).
+R9=$(mktemp -d)
+bash "$REPO/bin/render-replay.sh" "$R9/a.html" >/dev/null 2>"$R9/err" \
+  && bash "$REPO/bin/render-replay.sh" "$R9/b.html" >/dev/null 2>>"$R9/err"
+if [ -s "$R9/a.html" ] && cmp -s "$R9/a.html" "$R9/b.html"; then
+  ok "A9 two renders of the same fixture are byte-identical"
+else
+  bad "A9 render is not deterministic (or failed)"; sed 's/^/    /' "$R9/err"
+fi
+if [ -s "$R9/a.html" ] && cmp -s "$R9/a.html" "$REPLAY"; then
+  ok "A9b committed replay/index.html is exactly what the fixture renders to"
+else
+  bad "A9b replay/index.html has drifted from its fixture — run bin/render-replay.sh"
+  diff "$REPLAY" "$R9/a.html" | head -20 | sed 's/^/    /'
+fi
+mkdir -p "$R9/copy/bin" "$R9/copy/fixtures"
+cp "$REPO/bin/render-replay.sh" "$R9/copy/bin/"
+sed 's/The quest is posted/The quest is announced/' "$FIXTURE" > "$R9/copy/fixtures/recorded-quest.json"
+if bash "$R9/copy/bin/render-replay.sh" "$R9/c.html" >/dev/null 2>&1 && [ -s "$R9/c.html" ] \
+   && ! cmp -s "$R9/c.html" "$R9/a.html" && grep -q "The quest is announced" "$R9/c.html"; then
+  ok "A9c CONTROL: a changed fixture changes the render"
+else
+  bad "A9c CONTROL: a changed fixture did not change the render"
+fi
+rm -rf "$R9"
+
+# A10/A11/A12: THE PAGE'S OWN CONTRACT. A10: one self-contained file -- nothing fetched from
+# anywhere (no src/href/url()/@import, no http). A11: the accessibility floor -- a language, a
+# reduced-motion rule, every control labelled, and every text colour token at WCAG AA (4.5:1)
+# against every surface it is drawn on. A12: the refusal and the fix are marked, on the steps the
+# fixture itself puts them, and the fix comes after the refusal.
+python3 - "$FIXTURE" "$REPLAY" <<'PY'
+import json, re, sys
+fx = json.load(open(sys.argv[1])); page = open(sys.argv[2]).read(); fails = 0
+def report(ok, msg):
+    global fails
+    print("  %s %s" % (msg.split(":")[0], ("PASS:" if ok else "FAIL:") + msg.split(":", 1)[1]))
+    fails += 0 if ok else 1
+
+ext = re.findall(r'(?i)(https?://|\bsrc\s*=|\bhref\s*=|url\(|@import|<link\b|<iframe\b)', page)
+report(not ext, "A10: page requests nothing external%s" % ("" if not ext else " — found %r" % ext))
+
+problems = []
+if not re.search(r'<html lang="[a-z]', page): problems.append("no lang")
+if "prefers-reduced-motion" not in page: problems.append("no reduced-motion rule")
+for m in re.finditer(r'<input\b[^>]*>|<select\b[^>]*>', page):
+    tag = m.group(0); i = re.search(r'id="([^"]+)"', tag)
+    if 'aria-label=' not in tag and not (i and 'for="%s"' % i.group(1) in page):
+        problems.append("unlabelled control %s" % tag[:40])
+for m in re.finditer(r'<button\b[^>]*>(.*?)</button>', page, re.S):
+    if not re.sub(r'<span aria-hidden="true">.*?</span>|<[^>]+>|&[a-z#0-9]+;', '', m.group(1)).strip():
+        problems.append("button with no text")
+tok = dict(re.findall(r'--([a-z-]+):(#[0-9a-f]{6})', page))
+def lum(h):
+    c = [int(h[i:i+2], 16) / 255 for i in (1, 3, 5)]
+    c = [x / 12.92 if x <= 0.03928 else ((x + 0.055) / 1.055) ** 2.4 for x in c]
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+def ratio(a, b):
+    la, lb = sorted((lum(a), lum(b)), reverse=True); return (la + 0.05) / (lb + 0.05)
+texts = ["fg", "muted", "board", "worker", "researcher", "gate", "voice", "red", "green"]
+surfaces = ["bg", "panel", "term", "refuse-bg", "fix-bg"]
+worst = None
+for t in texts:
+    for s in surfaces:
+        if t not in tok or s not in tok: problems.append("missing token --%s/--%s" % (t, s)); continue
+        r = ratio(tok[t], tok[s]); worst = min(worst or r, r)
+        if r < 4.5: problems.append("--%s on --%s is %.2f:1" % (t, s, r))
+for bg in ("#232b36", "#2e3846", "#34404f"):  # button, button hover, current step
+    if bg not in page or ratio(tok.get("fg", "#000000"), bg) < 4.5: problems.append("button text on %s" % bg)
+report(not problems, "A11: lang, reduced motion, labelled controls, AA contrast (worst %.2f:1)%s"
+       % (worst or 0, "" if not problems else " — " + "; ".join(problems)))
+
+steps = json.loads(re.search(r"const STEPS = (\[.*?\]);\s*\n", page, re.S).group(1))
+ref = [s["n"] for s in steps if s["beat"] == "refuse"]; fix = [s["n"] for s in steps if s["beat"] == "fix"]
+heads, cur, want_ref, want_fix = {}, None, None, None
+for e in fx["events"]:
+    m = re.match(r"^\x1b\[1m(\d+)\. (.*)\x1b\[0m$", e["line"])
+    if m: cur = int(m.group(1)); heads[cur] = m.group(2); continue
+    if want_ref is None and e["line"].strip().startswith("NO "): want_ref = cur
+if want_ref is not None:
+    want_fix = next((n for n in sorted(heads) if n > want_ref and re.search(r"\bworker\b", heads[n].lower())), None)
+lines_refuse = len(re.findall(r'class="ln k-refuse', page))
+report(ref == [want_ref] and fix == [want_fix] and want_fix is not None and lines_refuse >= 1,
+       "A12: the refusal is marked on step %s and the fix on step %s (page: %r / %r, %d refusal lines)"
+       % (want_ref, want_fix, ref, fix, lines_refuse))
+sys.exit(1 if fails else 0)
+PY
+if [ $? -eq 0 ]; then arms=$((arms+3)); else arms=$((arms+3)); fails=$((fails+1)); fi
 
 if [ "$arms" -ne "$EXPECT_ARMS" ]; then
   echo "ARM COUNT: ran $arms, expected $EXPECT_ARMS — an arm was skipped or added."
