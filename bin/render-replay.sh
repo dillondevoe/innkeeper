@@ -13,7 +13,9 @@
 # The output is a pure function of the fixture: no clock, no randomness, no environment, so two
 # renders are byte-identical and tests/bin-record-quest-selftest.sh can compare the committed
 # page with a fresh render. One self-contained file: inline CSS and JS, no framework, and a
-# Content-Security-Policy that forbids every external request.
+# Content-Security-Policy that forbids every external request. With scripts off, a one-line
+# script in <head> never sets html.js, so CSS alone hides the player controls and every line
+# stays visible: the page degrades to the static transcript, never to a blank box.
 # Re-run this whenever bin/record-quest.sh writes a new fixture.
 set -euo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
@@ -108,6 +110,7 @@ page = """<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
 <title>Innkeeper — recorded quest replay</title>
+<script>document.documentElement.className = 'js';</script>
 <style>
   :root {
     color-scheme: dark;
@@ -171,6 +174,9 @@ page = """<!doctype html>
   .legend { margin: 0; display: grid; gap: 8px; }
   .legend dt { font-weight: 700; } .legend dd { margin: 0 0 4px; color: var(--dim); }
   .panel + .panel { margin-top: 20px; }
+  html:not(.js) .needs-js, html.js .no-js { display: none !important; }
+  html:not(.js) .step { pointer-events: none; cursor: default; }
+  html:not(.js) #term { height: auto; }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   footer { margin-top: 24px; color: var(--dim); font-size: .9rem; }
   @media (max-width: 520px) { #term { font-size: 13px; } #status { height: 4.5em; } .pace { margin-left: 0; } }
@@ -187,18 +193,19 @@ page = """<!doctype html>
 <div class="grid">
 <main class="panel">
   <h2 class="sr" id="nowLabel">Now showing</h2>
-  <p id="status" aria-live="polite"></p>
+  <p class="no-js">Scripts are off, so this is the whole transcript at once; turn scripts on for play, step and scrub.</p>
+  <p id="status" class="needs-js" aria-live="polite"></p>
   <div id="term" tabindex="0" role="region" aria-label="Quest transcript"><ol>
 __LINES__
   </ol></div>
-  <div class="controls" role="group" aria-label="Playback">
+  <div class="controls needs-js" role="group" aria-label="Playback">
     <button type="button" id="playBtn" aria-keyshortcuts="Space">Play</button>
     <button type="button" id="prevBtn" aria-keyshortcuts="ArrowLeft">&larr; Prev step</button>
     <button type="button" id="nextBtn" aria-keyshortcuts="ArrowRight">Next step &rarr;</button>
     <button type="button" id="restartBtn">Restart</button>
     <label class="pace">Pace <select id="pace"><option value="story">Story</option><option value="recorded">Recorded (__DURATION__ s)</option></select></label>
   </div>
-  <div class="scrub">
+  <div class="scrub needs-js">
     <input type="range" id="scrub" min="0" max="__N__" step="1" value="__N__" aria-label="Position in transcript, in lines">
     <span id="caption">__N__ / __N__ lines</span>
   </div>
@@ -225,7 +232,7 @@ __STEPS__
 </aside>
 </div>
 <footer>
-  <p>Keys (with the transcript or page focused): <kbd>Space</kbd> play/pause, <kbd>&larr;</kbd>/<kbd>&rarr;</kbd> previous/next step, <kbd>Home</kbd>/<kbd>End</kbd> start/end. The slider steps one line at a time.</p>
+  <p class="needs-js">Keys (with the transcript or page focused): <kbd>Space</kbd> play/pause, <kbd>&larr;</kbd>/<kbd>&rarr;</kbd> previous/next step, <kbd>Home</kbd>/<kbd>End</kbd> start/end. The slider steps one line at a time.</p>
   <p>Built by <code>bin/render-replay.sh</code> from <code>fixtures/recorded-quest.json</code>. With reduced motion requested, the replay does not start on its own and opens on the full transcript.</p>
 </footer>
 </div>

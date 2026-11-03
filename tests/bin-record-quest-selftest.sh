@@ -17,7 +17,7 @@ REPO=$(cd "$HERE/.." && pwd -P)
 FIXTURE="$REPO/fixtures/recorded-quest.json"
 REPLAY="$REPO/replay/index.html"
 
-EXPECT_ARMS=17
+EXPECT_ARMS=21
 fails=0
 arms=0
 ok()  { arms=$((arms+1)); echo "  $1 — PASS"; }
@@ -295,6 +295,120 @@ else:
 sys.exit(fails)
 PY
 rc=$?; arms=$((arms+2)); [ $rc -eq 0 ] || fails=$((fails+rc))
+
+# A12/A12b: CONTRAST, MEASURED FROM THE PAGE'S OWN CSS. Every colour the stylesheet paints with is
+# classified by the property it is used in: `color:` is text, `background:` is a surface, and
+# border/outline/accent-color are non-text marks (role bars, button and terminal borders, focus
+# ring, slider). currentColor borders are the text colour, already held to the text floor. Every
+# text colour is checked against EVERY surface (stricter than the real nesting) by WCAG 2.x
+# relative-luminance contrast, 4.5:1 for text and 3:1 for non-text, and the worst pairs are printed.
+# A12b is the control: the same check on a COPY with one colour dimmed must go red.
+CONTRAST_PY=$(cat <<'PY'
+import re, sys
+page = open(sys.argv[1]).read()
+css = "\n".join(re.findall(r"<style>(.*?)</style>", page, re.S))
+tok = dict(re.findall(r"--([a-z-]+):\s*(#[0-9a-fA-F]{6})\b", css))
+groups = {"text": {}, "surface": {}, "non-text": {}}
+for prop, v in re.findall(r"(?<![-\w])(color|background(?:-color)?|border(?:-[a-z]+)*|outline|accent-color)\s*:\s*([^;}]+)", css):
+    g = "text" if prop == "color" else "surface" if prop.startswith("background") else "non-text"
+    for var, lit in re.findall(r"var\(--([a-z-]+)\)|(#[0-9a-fA-F]{6})\b", v):
+        groups[g]["--" + var if var else lit] = tok.get(var) if var else lit
+def lum(h):
+    c = [int(h[i:i+2], 16) / 255 for i in (1, 3, 5)]
+    c = [x / 12.92 if x <= 0.04045 else ((x + 0.055) / 1.055) ** 2.4 for x in c]
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+def ratio(a, b):
+    hi, lo = sorted((lum(a), lum(b)), reverse=True); return (hi + 0.05) / (lo + 0.05)
+problems, worst = [], {}
+for g, floor in (("text", 4.5), ("non-text", 3.0)):
+    for n, h in groups[g].items():
+        for s, sh in groups["surface"].items():
+            if not h or not sh: problems.append("unresolved colour %s / %s" % (n, s)); continue
+            r = ratio(h, sh)
+            if g not in worst or r < worst[g][0]: worst[g] = (r, n, s)
+            if r < floor: problems.append("%s %s on %s is %.2f:1 (needs %.1f:1)" % (g, n, s, r, floor))
+if len(groups["text"]) < 5 or len(groups["surface"]) < 3 or len(groups["non-text"]) < 3:
+    problems.append("too few colours found %r — the CSS parse is broken" % {g: len(v) for g, v in groups.items()})
+print("%d text / %d surface / %d non-text colours; worst text %s; worst non-text %s" % (
+    len(groups["text"]), len(groups["surface"]), len(groups["non-text"]),
+    *("%.2f:1 %s on %s" % worst[g] if g in worst else "none" for g in ("text", "non-text"))))
+for p in problems: print("    " + p)
+sys.exit(1 if problems else 0)
+PY
+)
+if out=$(python3 -c "$CONTRAST_PY" "$REPLAY" 2>&1); then
+  ok "A12 contrast: every text pair >= 4.5:1, every non-text pair >= 3:1 — $out"
+else
+  bad "A12 contrast below WCAG AA — $out"
+fi
+C12=$(mktemp -d)
+sed 's/--dim: #a7b0bc;/--dim: #5a626c;/' "$REPLAY" > "$C12/dimmed.html"
+if cmp -s "$C12/dimmed.html" "$REPLAY"; then
+  bad "A12b CONTROL SETUP: the --dim token was not found to dim"
+elif out=$(python3 -c "$CONTRAST_PY" "$C12/dimmed.html" 2>&1); then
+  bad "A12b CONTROL: a copy with --dim dimmed to #5a626c still passed — A12 measures nothing"
+else
+  ok "A12b CONTROL: a copy with --dim dimmed to #5a626c is caught ($(echo "$out" | grep -m1 'text --dim' | sed 's/^ *//'))"
+fi
+
+# A13/A13b: NO-JS FALLBACK. With scripts disabled the page must still show the whole transcript
+# and hide the player, by CSS alone: a script in <head>, before <body>, sets html.js before first
+# paint; every control sits inside a .needs-js element that `html:not(.js)` hides; no transcript
+# line is hidden in the markup and no rule hides lines without the js class; a notice shows only
+# without JS. A13b is the control: a copy without the <head> script, and a copy whose lines are
+# rendered `hidden`, must both fail A13.
+NOJS_PY=$(cat <<'PY'
+import re, sys
+from html.parser import HTMLParser
+page = open(sys.argv[1]).read()
+problems = []
+head = page.split("<body", 1)[0]
+if not re.search(r"<script>[^<]*document\.documentElement\.(className\s*=\s*'js'|classList\.add\('js'\))[^<]*</script>", head):
+    problems.append("no script in <head> sets html.js before <body>")
+css = "\n".join(re.findall(r"<style>(.*?)</style>", page, re.S))
+if not re.search(r"html:not\(\.js\) \.needs-js[^{]*\{[^}]*display:\s*none", css):
+    problems.append("no CSS rule hides .needs-js without the js class")
+for sel, body in re.findall(r"([^{}]+)\{([^}]*)\}", css):
+    if re.search(r"#term|\.ln\b", sel) and re.search(r"display:\s*none|visibility:\s*hidden", body) and "html.js" not in sel:
+        problems.append("a rule hides transcript lines without JS: %s" % sel.strip())
+VOID = {"input", "br", "meta", "img", "hr", "link"}
+class P(HTMLParser):
+    def __init__(s):
+        super().__init__(); s.stack = []; s.ctl = {}; s.lines = s.hidden = 0; s.note = False
+    def handle_starttag(s, tag, attrs):
+        a = dict(attrs); cls = (a.get("class") or "").split()
+        gated = any("needs-js" in c for c in s.stack) or "needs-js" in cls
+        if tag not in VOID: s.stack.append(cls)
+        if a.get("id") in ("playBtn", "prevBtn", "nextBtn", "restartBtn", "scrub", "pace", "status"): s.ctl[a["id"]] = gated
+        if tag == "li" and "ln" in cls:
+            s.lines += 1; s.hidden += ("hidden" in a) or gated
+        if "no-js" in cls: s.note = True
+    def handle_endtag(s, tag):
+        if tag not in VOID and s.stack: s.stack.pop()
+p = P(); p.feed(page)
+ungated = sorted(k for k, v in p.ctl.items() if not v)
+if len(p.ctl) != 7 or ungated: problems.append("controls shown without JS: %s (found %d of 7)" % (ungated, len(p.ctl)))
+if not p.lines or p.hidden: problems.append("%d of %d transcript lines hidden in the markup" % (p.hidden, p.lines))
+if not p.note: problems.append("no .no-js notice")
+print("; ".join(problems) if problems else "%d lines shown statically, 7 controls gated on html.js" % p.lines)
+sys.exit(1 if problems else 0)
+PY
+)
+if out=$(python3 -c "$NOJS_PY" "$REPLAY" 2>&1); then
+  ok "A13 no-JS fallback: $out (set in <head>)"
+else
+  bad "A13 no-JS fallback broken — $out"
+fi
+sed "/<script>document.documentElement.className = 'js';<\/script>/d" "$REPLAY" > "$C12/noscript.html"
+sed 's/<li id="l\([0-9]*\)" class="ln /<li hidden id="l\1" class="ln /' "$REPLAY" > "$C12/hidden.html"
+if ! cmp -s "$C12/noscript.html" "$REPLAY" && ! cmp -s "$C12/hidden.html" "$REPLAY" \
+   && ! python3 -c "$NOJS_PY" "$C12/noscript.html" >/dev/null 2>&1 \
+   && ! python3 -c "$NOJS_PY" "$C12/hidden.html" >/dev/null 2>&1; then
+  ok "A13b CONTROL: a copy without the <head> script and a copy with hidden lines both fail A13"
+else
+  bad "A13b CONTROL: a broken no-JS copy still passed A13 (or a mutant did not apply)"
+fi
+rm -rf "$C12"
 
 if [ "$arms" -ne "$EXPECT_ARMS" ]; then
   echo "ARM COUNT: ran $arms, expected $EXPECT_ARMS — an arm was skipped or added."
