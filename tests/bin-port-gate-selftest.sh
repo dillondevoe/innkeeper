@@ -4,7 +4,7 @@
 # verdict: a skipped arm cannot hide inside a green.
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")/.." && pwd -P)
-EXPECT_ARMS=28
+EXPECT_ARMS=30
 pass=0 fail=0 arms=0
 
 # THE SECRETS SCANNER IS A PRECONDITION, AND A MISSING ONE IS NOT A FAILING ARM.
@@ -89,6 +89,12 @@ arm R2-crlf-list             1 '^FORBIDDEN host ' -- env INNKEEPER_FORBIDDEN=$T/
 mkdir -p "$T"/zorblax; ln -s "$T"/zorblax "$T"/alias
 arm W2-wall-via-symlink      1 '^REFUSED wall ' -- GS --source "$T/alias/x.sh" "$R/docs/clean.md"
 arm W3-source-required       2 'CANNOT-ASSESS .*--source' -- GS "$R/docs/clean.md"
+# ONE BYPASS, ONE MESSAGE. W4: `--source ""` set SRC empty, and the wall check is guarded by
+# `[ -n "$SRC" ]` -- so the gate returned PASS rc 0 with the wall never consulted, behind a flag
+# that looked supplied. W5 was NOT a bypass: a bare `--source` already exited 2 via usage(); the
+# arm pins that it now names the empty path instead of printing usage.
+arm W4-empty-source-refused   2 'CANNOT-ASSESS - --source was given an empty path' -- GS --source "" "$R/docs/clean.md"
+arm W5-valueless-source-refused 2 'CANNOT-ASSESS - --source was given an empty path' -- GS --source
 mkdir -p "$R"/lifecycle; cp "$T"/green "$R"/tests/deploy-selftest.sh
 arm N3-basename-collision    1 '^NO-SELFTEST lifecycle/deploy.py$' -- G "$(f lifecycle/deploy.py 'print(1)\n')"
 arm N4-path-keyed-selftest   0 '^PASS lifecycle/deploy.py$' -- bash -c "cp '$T/green' '$R/tests/lifecycle-deploy-selftest.sh' && INNKEEPER_FORBIDDEN='$T/list' bash '$R/bin/port-gate.sh' --no-source '$R/lifecycle/deploy.py'"

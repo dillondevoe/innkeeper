@@ -48,3 +48,74 @@ jobs:
         env:
           INNKEEPER_EXPECT_BATTERIES: "21"
         run: bash tests/run-all.sh
+
+  # The README promises bash 3.2 and the BSD tools. The runner image also carries Homebrew's
+  # bash 5 and GNU tools, which would quietly answer for them, so PATH is cut down to the
+  # system directories plus one shim dir holding only gitleaks and python3, and the first
+  # step proves which bash and which sed the suite will actually meet.
+  tests-macos:
+    name: tests/run-all.sh (macOS, bash 3.2 + BSD tools)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install gitleaks (pinned, checksum-verified) and a minimal PATH
+        run: |
+          set -euo pipefail
+          v=8.30.1
+          case "$(uname -m)" in
+            arm64)  a=darwin_arm64; sum=b40ab0ae55c505963e365f271a8d3846efbc170aa17f2607f13df610a9aeb6a5 ;;
+            x86_64) a=darwin_x64;   sum=dfe101a4db2255fc85120ac7f3d25e4342c3c20cf749f2c20a18081af1952709 ;;
+            *) echo "unexpected arch $(uname -m)"; exit 1 ;;
+          esac
+          curl -fsSL -o gitleaks.tgz "https://github.com/gitleaks/gitleaks/releases/download/v${v}/gitleaks_${v}_${a}.tar.gz"
+          echo "$sum  gitleaks.tgz" | shasum -a 256 -c -
+          shim="$RUNNER_TEMP/shim"; mkdir -p "$shim"
+          tar xzf gitleaks.tgz -C "$shim" gitleaks
+          ln -s "$(command -v python3)" "$shim/python3"
+          echo "SUITE_PATH=$shim:/usr/bin:/bin:/usr/sbin:/sbin" >> "$GITHUB_ENV"
+      - name: Prove the substrate (bash 3.2, BSD sed, no GNU coreutils)
+        run: |
+          export PATH="$SUITE_PATH"
+          command -v bash; bash --version | head -1
+          bash -c '[ "${BASH_VERSINFO[0]}" = 3 ]' || { echo "bash on PATH is not 3.x"; exit 1; }
+          if sed --version >/dev/null 2>&1; then echo "sed on PATH is GNU"; exit 1; fi
+          if command -v tac >/dev/null 2>&1; then echo "GNU tac on PATH"; exit 1; fi
+          python3 --version; gitleaks version; git --version
+      - name: Run the suite under /bin/bash 3.2
+        env:
+          INNKEEPER_EXPECT_BATTERIES: "21"
+        run: |
+          export PATH="$SUITE_PATH"
+          /bin/bash tests/run-all.sh
+
+  # GitHub's hosted runner is an unprivileged user; a root-only failure (PR #16's M15: a
+  # permission refusal that root simply walks through) was found by hand. This job is root.
+  tests-root:
+    name: tests/run-all.sh (root, ubuntu:24.04 container)
+    runs-on: ubuntu-24.04
+    container: ubuntu:24.04
+    steps:
+      - name: Install the README's requirements
+        run: |
+          set -eu
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+            ca-certificates curl git python3 >/dev/null
+          [ "$(id -u)" = 0 ] || { echo "not root"; exit 1; }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install gitleaks (pinned, checksum-verified)
+        run: |
+          set -eu
+          v=8.30.1
+          curl -fsSL -o gitleaks.tgz "https://github.com/gitleaks/gitleaks/releases/download/v${v}/gitleaks_${v}_linux_x64.tar.gz"
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tgz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/gl" && tar xzf gitleaks.tgz -C "$RUNNER_TEMP/gl" gitleaks
+          echo "$RUNNER_TEMP/gl" >> "$GITHUB_PATH"
+      - name: Run the suite as root
+        env:
+          INNKEEPER_EXPECT_BATTERIES: "21"
+        run: bash tests/run-all.sh

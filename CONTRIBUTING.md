@@ -22,6 +22,11 @@ It needs `gitleaks` on `PATH` (or `INNKEEPER_GITLEAKS`), or the port-gate batter
 CANNOT-RUN, which fails the suite. The runner's own battery is run directly:
 `bash tests/run-all-selftest.sh`.
 
+CI runs the same suite on Ubuntu, as root in an `ubuntu:24.04` container, and on macOS under
+`/bin/bash` 3.2 with the BSD system tools on `PATH` (plus `python3` and `gitleaks`). If you only have Linux, the macOS job
+on your pull request is how you find out whether a change is portable; a red there is a real
+portability defect, not noise.
+
 **Run one suite at a time.** The batteries share repo-level `state/`, so two concurrent runs
 produce failures neither produces alone (see the README). Likewise run a single battery
 directly with `bash tests/<name>-selftest.sh`, not several at once.
