@@ -26,6 +26,7 @@ M()  { bash "$IMPL" "$@" 2>/dev/null; }
 # Refusals are read with stderr ON. A negative arm that asserts only a non-zero rc passes when the
 # script is ABSENT, when a flag is misspelled, or when an earlier guard shadows the branch under
 # test -- the red phase of this file had four such arms passing against no implementation at all.
+# shellcheck disable=SC2069 # deliberate: keep stderr, drop stdout -- the refusal text is the value
 ME() { bash "$IMPL" "$@" 2>&1 >/dev/null; }
 n=0 pass=0
 arm() { # name, actual, expected-regex
@@ -116,6 +117,7 @@ chmod a-w "$H15/state/merged"
 # failure is built another way -- a quest id longer than any filename may be (ENAMETOOLONG,
 # NAME_MAX is 255 on Linux and macOS) -- which no privilege can override. Either way ln fails
 # with the destination genuinely absent, which is the only condition M15 needs.
+# shellcheck disable=SC2100 # a quest id, not arithmetic: the dash is part of the name
 Q15=q-fifteen
 if ( : > "$H15/state/merged/.probe" ) 2>/dev/null; then
   rm -f "$H15/state/merged/.probe"; chmod u+w "$H15/state/merged"
@@ -154,7 +156,7 @@ if [ -z "${MERGE_NESTED:-}" ]; then
     # against an implementation that never ran. D0 could not see it because D0 pointed at the
     # in-repo path and so did not share the mutants' construction: a control that does not
     # travel the mutant's path is not a control. (Review catch, 2026-09-20, before shipping.)
-    local f; f=$(mktemp "$R/bus/.mut-XXXXXX.sh")
+    local f; f=$(mktemp "$R/bus/.mut-XXXXXX")
     cp "$R/bus/merge.sh" "$f"
     # GNU `sed -i PROG f` and BSD `sed -i SUFFIX PROG f` are DIFFERENT COMMANDS sharing a
   # spelling. On macOS the program is eaten as a backup suffix, the edit never lands, and
@@ -170,7 +172,7 @@ if [ -z "${MERGE_NESTED:-}" ]; then
   }
   # D0 is the control: the UNMUTATED script, run through the same nested path, must stay green.
   # Without it a nested runner that always fails would make every mutation arm pass.
-  arm D0-unmutated-control "$(f=$(mktemp "$R/bus/.mut-XXXXXX.sh"); cp "$R/bus/merge.sh" "$f"; MERGE_NESTED=1 MERGE_IMPL=$f bash "$0" >/dev/null 2>&1 && echo GREEN || echo RED; rm -f "$f")" '^GREEN$'
+  arm D0-unmutated-control "$(f=$(mktemp "$R/bus/.mut-XXXXXX"); cp "$R/bus/merge.sh" "$f"; MERGE_NESTED=1 MERGE_IMPL=$f bash "$0" >/dev/null 2>&1 && echo GREEN || echo RED; rm -f "$f")" '^GREEN$'
   # `ln -f` is the single most plausible wrong edit here: it makes the commit succeed always, so
   # the second worker silently OVERWRITES the first. Exactly-once becomes last-writer-wins.
   arm D1-ln-force-is-caught "$(mut D1 's/if ln "\$src" "\$d" 2>\/dev\/null; then/if ln -f "$src" "$d" 2>\/dev\/null; then/')" '^D1=PASS$'

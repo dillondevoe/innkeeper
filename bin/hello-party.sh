@@ -75,8 +75,8 @@ role_lane() { # role_lane <role> -> the lane whose ROLE field is this
 }
 W=$(role_lane worker)     || die "the roster has no worker -- nobody can do the work"
 G=$(role_lane gate)       || die "the roster has no gate -- nothing would be checked"
-V=$(role_lane voice)      || die "the roster has no voice -- nobody would tell you"
-R=$(role_lane researcher) || die "the roster has no researcher"
+role_lane voice >/dev/null      || die "the roster has no voice -- nobody would tell you"
+role_lane researcher >/dev/null || die "the roster has no researcher"
 
 # ---------------------------------------------------------------- the work repo
 say "0. A tool that needs a version flag"

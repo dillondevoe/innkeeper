@@ -121,7 +121,7 @@ PARTY_BRAIN=voice bash "$REPO/staff/inbound.sh" | sed 's/^/   /'
 
 say "6. The herald speaks — ROSTER order, regardless of the order they spoke in"
 for b in $LANES; do
-  line=$(sed -n '5p' "$INNKEEPER_BUS"/comms/${b}-to-*-P2-first-light-line-${today}.md 2>/dev/null)
+  line=$(sed -n '5p' "$INNKEEPER_BUS"/comms/"${b}"-to-*-P2-first-light-line-"${today}".md 2>/dev/null)
   [ -n "$line" ] || { echo "   herald: $b filed nothing — the party is not whole" >&2; exit 1; }
   printf '   %-10s %s\n' "$b" "$line"
 done

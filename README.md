@@ -170,8 +170,11 @@ writer. Isolating them is open work; until then a red from a machine running two
 once is a fact about the machine.
 
 One battery is not a battery at all: `tests/portability-selftest.sh` greps the shell sources
-for GNU-only constructs (`tac`, `sed -i`, `$BASHPID`, BRE `\|`, `grep -P`, `readlink -f`,
-`date -d`). It exists because this repo was 15/15 green on Linux and 9/15 with a visibly
+under `bin/ bus/ roles/ lifecycle/ staff/ tests/` for GNU-only and bash-4-only constructs (`tac`,
+`sed -i`, `$BASHPID`, BRE `\|`, `grep -P`, `readlink -f`, `date -d`, `realpath -m`, `stat -c`,
+`mktemp` templates with X's not at the end, `find -printf`, `date +%N`/`-I`, and bash 4
+features such as `declare -A`, `mapfile` and `${v,,}`), and proves each pattern goes red on a
+planted line in a scratch tree. It exists because this repo was 15/15 green on Linux and 9/15 with a visibly
 broken demo on macOS on the same commit — the batteries catch these faithfully, but only on
 a machine that has the BSD tools, which the author's machine is not. The macOS CI job is that
 machine: it runs the whole suite under `/bin/bash` 3.2 with GNU tools kept off `PATH`, so this

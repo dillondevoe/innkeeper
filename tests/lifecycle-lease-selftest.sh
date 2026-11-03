@@ -45,7 +45,7 @@ arm A11-release-holder "$(L release oldnonce; [ -e "$LOCK" ] && echo STILL-THERE
 # Race: 8 instances boot together on a free lane; exactly one may CLAIM. Run 10 rounds, because a
 # race measured once is a sample.
 rounds_bad=0
-for r in 1 2 3 4 5 6 7 8 9 10; do
+for _ in 1 2 3 4 5 6 7 8 9 10; do
   rm -f "$LOCK"
   for i in 1 2 3 4 5 6 7 8; do L claim > "$T/out.$i" & done; wait
   k=$(cat "$T"/out.* | command grep -c '^CLAIMED ' || true)
@@ -137,7 +137,7 @@ arm S10-zero-is-absent-not-zero  "$(DARWIN py-zero status)"            '^STALE a
 # script that grows a sibling dependency does not quietly re-open that hole.
 if [ -z "${LEASE_NESTED:-}" ]; then
   mut() { # name, sed-program -> name=PASS when the mutant is CAUGHT (battery red)
-    local f; f=$(mktemp "$R/lifecycle/.mut-XXXXXX.sh")
+    local f; f=$(mktemp "$R/lifecycle/.mut-XXXXXX")
     cp "$R/lifecycle/lease.sh" "$f"
     # GNU `sed -i PROG f` and BSD `sed -i SUFFIX PROG f` are DIFFERENT COMMANDS sharing a
   # spelling. On macOS the program is eaten as a backup suffix, the edit never lands, and
@@ -152,7 +152,7 @@ if [ -z "${LEASE_NESTED:-}" ]; then
   # D0 travels the mutants' exact path with an UNMUTATED copy. Without it every mutation arm passes
   # on a nested runner that fails for any reason at all.
   arm D0-unmutated-control \
-    "$(f=$(mktemp "$R/lifecycle/.mut-XXXXXX.sh"); cp "$R/lifecycle/lease.sh" "$f"; \
+    "$(f=$(mktemp "$R/lifecycle/.mut-XXXXXX"); cp "$R/lifecycle/lease.sh" "$f"; \
        LEASE_NESTED=1 LEASE_IMPL=$f bash "$0" >/dev/null 2>&1 && echo GREEN || echo RED; rm -f "$f")" '^GREEN$'
   # D1 -- ignore the awake clock and age on the wall again. This IS the laptop-sleep bug.
   arm D1-wall-clock-regression-is-caught \
