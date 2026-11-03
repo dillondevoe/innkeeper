@@ -19,9 +19,10 @@ REPO=$(cd "$HERE/.." && pwd -P)
 OUT="$REPO/fixtures/recorded-quest.json"
 CHECK=0; [ "${1:-}" = "--check" ] && CHECK=1
 
-command -v python3 >/dev/null 2>&1 || { echo "FATAL: python3 is required to write the fixture" >&2; exit 2; }
+command -v python3 >/dev/null 2>&1 || { echo "FATAL: python3 is required to write the fixture. Install python3, then re-run." >&2; exit 2; }
 
-TMP=$(mktemp "${TMPDIR:-/tmp}"/record-quest.XXXXXX) || exit 2
+TMP=$(mktemp "${TMPDIR:-/tmp}"/record-quest.XXXXXX) \
+  || { echo "FATAL: cannot make a temp file under ${TMPDIR:-/tmp}. Check that it exists and is writable, or set TMPDIR." >&2; exit 2; }
 trap 'rm -f "$TMP"' EXIT
 
 # One line per output line, each stamped with seconds-since-start to two decimal places.

@@ -28,9 +28,29 @@ set -uo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
 REPO=$(cd "$HERE/.." && pwd -P)
 ACTOR="$REPO/bus/actor.sh"
-KEEP=0; [ "${1:-}" = "--keep" ] && KEEP=1
+KEEP=0
+# AN UNKNOWN ARGUMENT IS REFUSED, NOT IGNORED. `--kep` used to run the demo and then delete the
+# sandbox the caller had asked to keep.
+usage() { echo "usage: bin/smoke.sh [--keep]    (--keep leaves the sandbox on disk to inspect)"; }
+case "$#:${1:-}" in
+  0:) ;;
+  1:--keep) KEEP=1 ;;
+  1:-h|1:--help) usage; exit 0 ;;
+  *) echo "smoke.sh: unrecognised argument(s): $*" >&2; usage >&2; exit 2 ;;
+esac
 
-SANDBOX=$(mktemp -d "${TMPDIR:-/tmp}/smoke.XXXXXX") || { echo "cannot make a sandbox" >&2; exit 2; }
+# EVERY FATAL SAYS WHAT TO DO NEXT. The demos run on an unmodified checkout with no setup, so
+# a failure here is either a local edit (most often to party.yaml) or a bug; say both.
+fatal() { # fatal <rc> <what went wrong>
+  echo "FATAL: $2" >&2
+  echo "   What to do: this does not fail on an unmodified checkout. Run 'git status' for local" >&2
+  echo "   edits (party.yaml especially; unset INNKEEPER_PARTY if you set it), re-run with --keep" >&2
+  echo "   to inspect the sandbox, and if it still fails open an issue with this output:" >&2
+  echo "   https://github.com/dillondevoe/innkeeper/issues" >&2
+  exit "$1"
+}
+
+SANDBOX=$(mktemp -d "${TMPDIR:-/tmp}/smoke.XXXXXX") || { echo "cannot make a sandbox under ${TMPDIR:-/tmp}. Check that it exists and is writable, or point TMPDIR at a directory that is." >&2; exit 2; }
 [ "$KEEP" = 1 ] || trap 'rm -rf "$SANDBOX"' EXIT
 export INNKEEPER_BUS="$SANDBOX/bus"
 export INNKEEPER_HOME="$SANDBOX"
@@ -45,8 +65,8 @@ say() { printf '\n\033[1m%s\033[0m\n' "$*"; }
 
 # THE RC IS CONSUMED AT THE ASSIGNMENT. Same rule as bus/enqueue.sh: a helper that exits
 # inside $( ) exits the subshell only, and the caller runs on with an empty string.
-LANES=$(bash "$ACTOR" lanes) || { echo "FATAL: actor.sh refused to name the lanes" >&2; exit 2; }
-[ -n "$LANES" ] || { echo "FATAL: roster names no lanes — nothing can boot" >&2; exit 2; }
+LANES=$(bash "$ACTOR" lanes) || fatal 2 "could not read the party roster at $INNKEEPER_PARTY"
+[ -n "$LANES" ] || fatal 2 "the roster at $INNKEEPER_PARTY names no lanes — nothing can boot"
 
 say "1. The roster — read from party.yaml by bus/actor.sh, not by this script"
 printf '   %s\n' $LANES
@@ -56,9 +76,9 @@ bash "$REPO/bus/quest.sh" new first-light \
   --title "Make the smoke slice print one line from each brain" \
   --brief-file "$REPO/fixtures/quests/first-light.yaml" \
   --origin "fixtures/quests/first-light.yaml" >/dev/null \
-  || { echo "FATAL: quest.sh refused to open the quest" >&2; exit 1; }
+  || fatal 1 "quest.sh refused to open the quest"
 bash "$REPO/bus/quest.sh" claim first-light worker >/dev/null \
-  || { echo "FATAL: quest.sh refused the claim" >&2; exit 1; }
+  || fatal 1 "quest.sh refused the claim"
 echo "   first-light: state=$(bash "$REPO/bus/quest.sh" field first-light state) lane=$(bash "$REPO/bus/quest.sh" field first-light lane)"
 
 say "3. Four brains boot and each writes ONE line to the bus (reverse roster order)"
@@ -67,17 +87,17 @@ today=$(date -u +%Y-%m-%d)
 # It failed there loudly (`tac: command not found`) and the demo carried on regardless --
 # see the step guard below. awk is POSIX and on every box that has a shell.
 REVERSED=$(printf '%s\n' $LANES | awk '{a[NR]=$0} END{for(i=NR;i>0;i--) print a[i]}') \
-  || { echo "FATAL: could not reverse the roster" >&2; exit 2; }
+  || fatal 2 "could not reverse the roster"
 # The rule four lines above -- THE RC IS CONSUMED AT THE ASSIGNMENT -- was stated here and
 # not applied here. When `tac` was missing on macOS, this assignment failed, REVERSED came
 # out empty, the `for` loop over it ran ZERO times, and the demo carried on to print
 # `enqueue: 0 marker(s) queued` and four empty delivery tiers with `(control:ok)`. A
 # stranger reading that output sees a quiet party, not a broken one: the failure rendered
 # as a legitimate-looking empty result, which is the only shape worth fearing on a stage.
-[ -n "$REVERSED" ] || { echo "FATAL: the reversed roster is empty" >&2; exit 2; }
+[ -n "$REVERSED" ] || fatal 2 "the reversed roster is empty"
 FIRST=$(printf '%s\n' $LANES | sed -n 1p)
 SECOND=$(printf '%s\n' $LANES | sed -n 2p)
-[ -n "$SECOND" ] || { echo "FATAL: a party of one cannot pass a message" >&2; exit 1; }
+[ -n "$SECOND" ] || fatal 1 "a party of one cannot pass a message"
 for b in $REVERSED; do
   role=$(bash "$ACTOR" field "$b" role 2>/dev/null || echo brain)
   # NOBODY ADDRESSES THEMSELVES, AND NO NAME IS TYPED HERE. Everyone files to the first
@@ -103,7 +123,7 @@ say "6. The herald speaks — ROSTER order, regardless of the order they spoke i
 for b in $LANES; do
   line=$(sed -n '5p' "$INNKEEPER_BUS"/comms/${b}-to-*-P2-first-light-line-${today}.md 2>/dev/null)
   [ -n "$line" ] || { echo "   herald: $b filed nothing — the party is not whole" >&2; exit 1; }
-  printf '   %-8s %s\n' "$b" "$line"
+  printf '   %-10s %s\n' "$b" "$line"
 done
 
 # NO BACKTICKS IN A DOUBLE-QUOTED STRING. This line read ...refuses `done` while... and bash
@@ -111,7 +131,7 @@ done
 # printed two steps early. Prose about a shell keyword is still shell.
 say '7. The quest closes — quest.sh refuses the done state while anything blocks it'
 bash "$REPO/bus/quest.sh" state first-light done >/dev/null \
-  || { echo "FATAL: quest.sh refused to close the quest" >&2; exit 1; }
+  || fatal 1 "quest.sh refused to close the quest"
 echo "   first-light: state=$(bash "$REPO/bus/quest.sh" field first-light state)"
 
 say "smoke complete."

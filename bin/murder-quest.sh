@@ -32,9 +32,29 @@ ACTOR="$REPO/bus/actor.sh"
 QUEST="$REPO/bus/quest.sh"
 MERGE="${INNKEEPER_MERGE:-$REPO/bus/merge.sh}"
 LEASE="$REPO/lifecycle/lease.sh"
-KEEP=0; [ "${1:-}" = "--keep" ] && KEEP=1
+KEEP=0
+# AN UNKNOWN ARGUMENT IS REFUSED, NOT IGNORED. `--kep` used to run the demo and then delete the
+# sandbox the caller had asked to keep.
+usage() { echo "usage: bin/murder-quest.sh [--keep]    (--keep leaves the sandbox on disk to inspect)"; }
+case "$#:${1:-}" in
+  0:) ;;
+  1:--keep) KEEP=1 ;;
+  1:-h|1:--help) usage; exit 0 ;;
+  *) echo "murder-quest.sh: unrecognised argument(s): $*" >&2; usage >&2; exit 2 ;;
+esac
 
-SANDBOX=$(mktemp -d "${TMPDIR:-/tmp}/murder-quest.XXXXXX") || { echo "cannot make a sandbox" >&2; exit 2; }
+# EVERY FATAL SAYS WHAT TO DO NEXT. The demos run on an unmodified checkout with no setup, so
+# a failure here is either a local edit (most often to party.yaml) or a bug; say both.
+fatal() { # fatal <rc> <what went wrong>
+  echo "FATAL: $2" >&2
+  echo "   What to do: this does not fail on an unmodified checkout. Run 'git status' for local" >&2
+  echo "   edits (party.yaml especially; unset INNKEEPER_PARTY if you set it), re-run with --keep" >&2
+  echo "   to inspect the sandbox, and if it still fails open an issue with this output:" >&2
+  echo "   https://github.com/dillondevoe/innkeeper/issues" >&2
+  exit "$1"
+}
+
+SANDBOX=$(mktemp -d "${TMPDIR:-/tmp}/murder-quest.XXXXXX") || { echo "cannot make a sandbox under ${TMPDIR:-/tmp}. Check that it exists and is writable, or point TMPDIR at a directory that is." >&2; exit 2; }
 [ "$KEEP" = 1 ] || trap 'rm -rf "$SANDBOX"' EXIT
 export INNKEEPER_BUS="$SANDBOX/bus"
 export INNKEEPER_HOME="$SANDBOX"
@@ -53,10 +73,10 @@ check() { # description, actual, expected
 
 # Names are read off the roster, never typed here: party.yaml promises nothing keys on these
 # strings, and bin/ is the directory the port gate scans for hardcoded addressing.
-LANES=$(bash "$ACTOR" lanes) || { echo "FATAL: actor.sh refused to name the lanes" >&2; exit 2; }
+LANES=$(bash "$ACTOR" lanes) || fatal 2 "could not read the party roster at $INNKEEPER_PARTY"
 A=$(printf '%s\n' $LANES | sed -n 1p)
 B=$(printf '%s\n' $LANES | sed -n 2p)
-[ -n "$A" ] && [ -n "$B" ] || { echo "FATAL: a party of one cannot take over from itself" >&2; exit 1; }
+[ -n "$A" ] && [ -n "$B" ] || fatal 1 "a party of one cannot take over from itself"
 
 # A worker: claims the lane, begins an attempt, writes its result INTO THE ATTEMPT DIR, and only
 # then commits. `--die-before` and `--die-after` make it exit in the two places a crash can land.
@@ -140,7 +160,10 @@ check "and the bytes are the DEAD worker's"     "$(cat "$(bash "$MERGE" dest men
 check "credited to the worker that did it"      "$(bash "$MERGE" status mend-the-roof | sed -n 's/.*by=\([^ ]*\).*/\1/p')" "$A"
 
 say "murder-quest complete."
-[ "$fail" = 0 ] || { echo "SOME CHECKS FAILED — the world is not what this script says it is." >&2; exit 1; }
+[ "$fail" = 0 ] || { echo "SOME CHECKS FAILED — the world is not what this script says it is." >&2
+  echo "   What to do: the failing lines above are marked in red with got/want. Make sure no other" >&2
+  echo "   copy of this demo or of tests/run-all.sh is running, then re-run. If it still fails," >&2
+  echo "   open an issue with this output: https://github.com/dillondevoe/innkeeper/issues" >&2; exit 1; }
 echo "Two workers were killed. Each quest merged exactly once, and the second kill —"
 echo "after the commit, before the announcement — did not cost the work or duplicate it."
 [ "$KEEP" = 1 ] && echo "sandbox kept at $SANDBOX" || echo "(sandbox removed; --keep to inspect it)"

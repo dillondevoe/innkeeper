@@ -55,7 +55,7 @@ case "$1" in -*) usage ;; esac
 # Three worlds, three lines: "no variable" and "no file" call for different fixes, and one
 # message for both sent a reader hunting for a file that existed (Geist, FOREGROUND 382 s3).
 if [ -z "$LIST" ]; then
-  echo "CANNOT-ASSESS - forbidden list unset (INNKEEPER_FORBIDDEN is not set)"; exit 2
+  echo "CANNOT-ASSESS - forbidden list unset (INNKEEPER_FORBIDDEN is not set). Point it at your private list: one <class><TAB><regex> rule per line, kept outside the repo"; exit 2
 elif [ ! -e "$LIST" ]; then
   echo "CANNOT-ASSESS - forbidden list not found at INNKEEPER_FORBIDDEN=$LIST"; exit 2
 elif [ ! -s "$LIST" ]; then

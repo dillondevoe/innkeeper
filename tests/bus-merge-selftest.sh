@@ -110,11 +110,22 @@ arm M12-usage-is-reached "$(M not-a-verb; echo "rc=$?")" 'rc=2'
 mkdir -p "$H15/state/merged" "$H15/work"
 printf 'x' > "$H15/src.part"
 chmod a-w "$H15/state/merged"
+# ROOT IGNORES chmod a-w. Run as root (a container, a CI image) the "unwritable" dir took the
+# link, M15 saw MERGED, and a fresh clone's suite went RED on a correct merge.sh. So the
+# precondition is PROBED, not assumed: if the dir still takes a write, the same non-EEXIST
+# failure is built another way -- a quest id longer than any filename may be (ENAMETOOLONG,
+# NAME_MAX is 255 on Linux and macOS) -- which no privilege can override. Either way ln fails
+# with the destination genuinely absent, which is the only condition M15 needs.
+Q15=q-fifteen
+if ( : > "$H15/state/merged/.probe" ) 2>/dev/null; then
+  rm -f "$H15/state/merged/.probe"; chmod u+w "$H15/state/merged"
+  Q15=q-$(printf '%0300d' 0)
+fi
 arm M15-nonexistent-dest-is-a-hard-error \
-  "$(INNKEEPER_HOME=$H15 bash "$IMPL" commit q-fifteen "$LANE_A" "$H15/src.part" 2>&1; echo "rc=$?")" \
+  "$(INNKEEPER_HOME=$H15 bash "$IMPL" commit "$Q15" "$LANE_A" "$H15/src.part" 2>&1; echo "rc=$?")" \
   'did NOT happen'
 arm M15b-and-it-is-not-reported-as-merged \
-  "$(INNKEEPER_HOME=$H15 bash "$IMPL" commit q-fifteen "$LANE_A" "$H15/src.part" 2>/dev/null; echo "rc=$?")" \
+  "$(INNKEEPER_HOME=$H15 bash "$IMPL" commit "$Q15" "$LANE_A" "$H15/src.part" 2>/dev/null; echo "rc=$?")" \
   '^rc=1$'
 chmod u+w "$H15/state/merged"
 

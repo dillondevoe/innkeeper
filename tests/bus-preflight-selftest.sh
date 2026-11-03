@@ -15,7 +15,7 @@ HERE=$(cd "$(dirname "$0")" && pwd -P)
 REPO=$(cd "$HERE/.." && pwd -P)
 PRE="$REPO/bus/preflight.sh"
 
-EXPECT_ARMS=25
+EXPECT_ARMS=27
 fails=0; arms=0
 ok()  { arms=$((arms+1)); echo "  $1 — PASS"; }
 bad() { arms=$((arms+1)); fails=$((fails+1)); echo "  $1 — FAIL${2:+ :: $2}"; }
@@ -205,6 +205,15 @@ case "$out" in *"TRUNCATED"*voice*) ok "A-PIPE a long roster does not silence a 
 # a pre-fix arm, and it is kept for what it rules out rather than for what it caught.
 case "$out" in *"NO LANE"*) bad "A-PIPE2 a lane-owning actor is not reported NO LANE" "$out";;
   *) ok "A-PIPE2 a lane-owning actor is not reported NO LANE";; esac
+
+# P-USAGE: no argument is a usage error that says what was missing, on stderr, rc 2.
+out=$(bash "$PRE" 2>&1 >/dev/null); rc=$?
+case "$rc:$out" in 2:*"no draft given"*usage:*) ok "P-USAGE no argument says what is missing";;
+  *) bad "P-USAGE no argument says what is missing" "rc=$rc out=[$out]";; esac
+# P-FATAL-HINT: an unreadable roster says what to do next, not only that actor.sh refused.
+out=$(env -u INNKEEPER_COMMS INNKEEPER_PARTY="$WORK/no-such-party.yaml" bash "$PRE" x.md 2>&1); rc=$?
+case "$rc:$out" in 2:*FATAL*"What to do"*INNKEEPER_COMMS*) ok "P-FATAL-HINT an unreadable roster says what to do";;
+  *) bad "P-FATAL-HINT an unreadable roster says what to do" "rc=$rc out=[$out]";; esac
 
 if [ "$arms" -ne "$EXPECT_ARMS" ]; then
   echo "ARM COUNT: ran $arms, expected $EXPECT_ARMS — an arm was skipped or added."

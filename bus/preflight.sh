@@ -70,10 +70,17 @@ export INNKEEPER_PARTY="$PARTY"
 # the same collapse of "it refused" into "it answered empty" that this repo's roster guard
 # was written for, and the first version of this very comment shipped above code that
 # committed it.
+fatal() { # fatal <rc> <what went wrong> -- and what to do about it
+  echo "FATAL: $2" >&2
+  echo "   What to do: preflight reads the bus location from the roster at $PARTY. Check that the" >&2
+  echo "   file exists and lists the party (git checkout -- party.yaml restores the shipped one)," >&2
+  echo "   or set INNKEEPER_COMMS to the comms directory to check against." >&2
+  exit "$1"
+}
 if [ -n "${INNKEEPER_COMMS:-}" ]; then COMMS=$INNKEEPER_COMMS
 else
-  _b=$(bash "$ACTOR" bus) || { echo "FATAL: actor.sh refused to name the bus (unreadable roster?)" >&2; exit 2; }
-  [ -n "$_b" ] || { echo "FATAL: actor.sh named an empty bus path" >&2; exit 2; }
+  _b=$(bash "$ACTOR" bus) || fatal 2 "actor.sh refused to name the bus (unreadable roster?)"
+  [ -n "$_b" ] || fatal 2 "actor.sh named an empty bus path"
   COMMS=$_b/comms
 fi
 
@@ -204,7 +211,9 @@ report_one() {
 
 case "${1:-}" in
   --selftest) exec bash "$REPO/tests/bus-preflight-selftest.sh";;
-  "") sed -n '2,6p' "$0"; exit 2;;
+  # Usage goes to stderr without the comment markers, and says what was missing.
+  "") { echo "preflight.sh: no draft given. Name at least one comm file to check."; echo "usage:"
+        sed -n '2,5p' "$0" | sed 's/^#/ /'; } >&2; exit 2;;
 esac
 
 rc=0

@@ -18,8 +18,10 @@
 # as a LOWER BOUND and says so. Quietly treating an unreadable cost as 0 would make the one
 # run whose metering broke look like the cheapest run there had ever been.
 set -uo pipefail
-ledger=${1:?usage: live-cost.sh <ledger.tsv>}
-[ -f "$ledger" ] || { echo "live-cost: no ledger at $ledger -- this quest recorded no calls" >&2; exit 2; }
+[ $# -eq 1 ] || { echo "usage: bin/live-cost.sh <ledger.tsv>   (bin/live-party.sh writes ledger.tsv in its sandbox; --keep keeps it)" >&2; exit 2; }
+ledger=$1
+[ -f "$ledger" ] || { echo "live-cost: no ledger at $ledger -- this quest recorded no calls. Check the path: bin/live-party.sh writes ledger.tsv inside its sandbox and removes it on exit unless run with --keep." >&2; exit 2; }
+command -v python3 >/dev/null 2>&1 || { echo "live-cost: python3 is required to total the ledger. Install python3, then re-run." >&2; exit 2; }
 
 python3 - "$ledger" <<'PY'
 import sys

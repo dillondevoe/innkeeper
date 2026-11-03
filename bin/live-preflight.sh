@@ -69,10 +69,10 @@ resolve_budget() { # -> prints the ceiling, or rc 1
 
 case "${1:-}" in
   --selftest) exec bash "$REPO/tests/bin-live-preflight-selftest.sh";;
-  --budget) b=$(resolve_budget) || { echo "INNKEEPER_LIVE_MAX_USD is not a number: [$b]" >&2; exit 1; }
+  --budget) b=$(resolve_budget) || { echo "INNKEEPER_LIVE_MAX_USD is not a number: [$b]. Give it a plain decimal (e.g. 1.00), or unset it to take the 3.00 default." >&2; exit 1; }
             printf '%s\n' "$b"; exit 0;;
   "") ;;
-  *) sed -n '2,8p' "$0"; exit 2;;
+  *) { echo "live-preflight.sh: unrecognised argument: $1"; echo "usage:"; sed -n '3,8p' "$0" | sed 's/^#/ /'; } >&2; exit 2;;
 esac
 
 rc=0

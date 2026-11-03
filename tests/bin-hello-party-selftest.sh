@@ -9,7 +9,7 @@
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd -P); R=$(cd "$HERE/.." && pwd -P)
 arms=0; fails=0
-EXPECT_ARMS=${INNKEEPER_EXPECT_HP_ARMS:-13}
+EXPECT_ARMS=${INNKEEPER_EXPECT_HP_ARMS:-15}
 ok()  { arms=$((arms+1)); echo "  $1 — PASS"; }
 bad() { arms=$((arms+1)); fails=$((fails+1)); echo "  $1 — FAIL${2:+ :: $2}"; }
 arm() { # arm <name> <haystack> <ERE>
@@ -47,6 +47,13 @@ printf '%s\n' "$MOUT" | grep -q 'gate PASSED attempt 1' \
   && ok "D2 CONTROL and it says WHY it failed" \
   || bad "D2 CONTROL and it says WHY it failed" "$(printf '%s\n' "$MOUT" | tail -1)"
 rm -rf "$MUT"
+
+# U1/U2 -- arguments. An unknown one is REFUSED with usage (rc 2), not ignored: `--kep` used
+# to run the whole quest and then delete the sandbox the caller had asked to keep.
+UE=$(bash "$R/bin/hello-party.sh" --kep 2>&1 >/dev/null); URC=$?
+arm U1-unknown-arg-refused "$URC:$UE" '^2:hello-party.sh: unrecognised argument'
+HO=$(bash "$R/bin/hello-party.sh" --help 2>/dev/null); HRC=$?
+arm U2-help-prints-usage "$HRC:$HO" '^0:usage: bin/hello-party.sh \[--keep\]'
 
 if [ "$arms" -ne "$EXPECT_ARMS" ]; then
   echo "ARM COUNT: ran $arms, expected $EXPECT_ARMS — an arm was skipped or added."

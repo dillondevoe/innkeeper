@@ -36,7 +36,13 @@ set -uo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
 REPO=$(cd "$HERE/.." && pwd -P)
 ACTOR="$REPO/bus/actor.sh"
-KEEP=0; [ "${1:-}" = "--keep" ] && KEEP=1
+KEEP=0
+# An unknown argument is refused before the spend gate is even asked, not ignored.
+case "$#:${1:-}" in
+  0:) ;;
+  1:--keep) KEEP=1 ;;
+  *) echo "usage: bin/live-party.sh [--keep]   (unrecognised: $*; nothing was spent)" >&2; exit 2 ;;
+esac
 
 say()  { printf '\n\033[1m%s\033[0m\n' "$*"; }
 note() { printf '   %s\n' "$*"; }
@@ -48,12 +54,12 @@ say "0. The gate on spending"
   exit 1
 }
 
-command -v git >/dev/null 2>&1 || die "this quest works on a real git repo and git is not installed"
+command -v git >/dev/null 2>&1 || die "git is not installed, and this quest commits to a real git repo. Install git, then re-run."
 
 # ${TMPDIR%/} -- macOS exports TMPDIR WITH a trailing slash, so the unstripped form prints
 # paths like /var/folders/.../T//live-party.xxxx. Harmless, and it is the first thing a
 # stranger sees.
-SANDBOX=$(mktemp -d "${TMPDIR:-/tmp}"/live-party.XXXXXX) || die "cannot make a sandbox"
+SANDBOX=$(mktemp -d "${TMPDIR:-/tmp}"/live-party.XXXXXX) || die "cannot make a sandbox under ${TMPDIR:-/tmp}. Check that it exists and is writable, or set TMPDIR."
 SANDBOX=${SANDBOX%/}
 [ "$KEEP" = 1 ] || trap 'rm -rf "$SANDBOX"' EXIT
 export INNKEEPER_BUS="$SANDBOX/bus"
