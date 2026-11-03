@@ -12,7 +12,10 @@ starts, not after.
 ## First ten minutes
 
 On Linux or macOS, with `bash`, `git` and `python3` installed (details under
-[Requirements](#requirements)). Nothing here calls a model, uses the network or spends money.
+[Requirements](#requirements)). The suite is verified in CI on every pull request on Ubuntu, as
+root in an `ubuntu:24.04` container, and on macOS under the stock `/bin/bash` 3.2 with the
+system (BSD) tools on `PATH` and nothing else but `python3` and `gitleaks`
+(`.github/workflows/ci.yml`). Nothing here calls a model, uses the network or spends money.
 
 | Run this | Takes | The last lines you should see |
 |---|---|---|
@@ -167,7 +170,9 @@ One battery is not a battery at all: `tests/portability-selftest.sh` greps the s
 for GNU-only constructs (`tac`, `sed -i`, `$BASHPID`, BRE `\|`, `grep -P`, `readlink -f`,
 `date -d`). It exists because this repo was 15/15 green on Linux and 9/15 with a visibly
 broken demo on macOS on the same commit — the batteries catch these faithfully, but only on
-a machine that has the BSD tools, which the author's machine is not.
+a machine that has the BSD tools, which the author's machine is not. The macOS CI job is that
+machine: it runs the whole suite under `/bin/bash` 3.2 with GNU tools kept off `PATH`, so this
+grep is the early warning, and the macOS job is the measurement.
 
 ## Then kill a worker
 
@@ -206,7 +211,7 @@ with whatever login or environment you already have.
 ## Requirements
 
 - **The demos** (`bin/hello-party.sh`, `bin/smoke.sh`, `bin/murder-quest.sh`): `bash` (3.2 or
-  later, so macOS's stock bash works), `git`, and the standard POSIX tools (`awk`, `sed`,
+  later; macOS's stock bash is what the macOS CI job runs), `git`, and the standard POSIX tools (`awk`, `sed`,
   `mktemp`, ...). They also run without `python3`.
 - **The test suite** (`tests/run-all.sh`): the above plus `python3` and
   [gitleaks](https://github.com/gitleaks/gitleaks) (the port-gate battery reports CANNOT-RUN
