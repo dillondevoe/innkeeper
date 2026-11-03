@@ -26,11 +26,22 @@ set -uo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
 REPO=$(cd "$HERE/.." && pwd -P)
 ACTOR="$REPO/bus/actor.sh"
-KEEP=0; [ "${1:-}" = "--keep" ] && KEEP=1
+KEEP=0
+# AN UNKNOWN ARGUMENT IS REFUSED, NOT IGNORED. `--kep` used to run the demo and then delete the
+# sandbox the caller had asked to keep.
+usage() { echo "usage: bin/hello-party.sh [--keep]    (--keep leaves the sandbox on disk to inspect)"; }
+case "$#:${1:-}" in
+  0:) ;;
+  1:--keep) KEEP=1 ;;
+  1:-h|1:--help) usage; exit 0 ;;
+  *) echo "hello-party.sh: unrecognised argument(s): $*" >&2; usage >&2; exit 2 ;;
+esac
 
-command -v git >/dev/null 2>&1 || { echo "FATAL: this quest works on a real git repo and git is not installed" >&2; exit 2; }
 
-SANDBOX=$(mktemp -d "${TMPDIR:-/tmp}"/hello-party.XXXXXX) || { echo "cannot make a sandbox" >&2; exit 2; }
+command -v git >/dev/null 2>&1 || { echo "FATAL: git is not installed, and this quest commits to a real (sandboxed) git repo." >&2
+  echo "   What to do: install git (Debian/Ubuntu: sudo apt install git; macOS: xcode-select --install), then re-run." >&2; exit 2; }
+
+SANDBOX=$(mktemp -d "${TMPDIR:-/tmp}"/hello-party.XXXXXX) || { echo "cannot make a sandbox under ${TMPDIR:-/tmp}. Check that it exists and is writable, or point TMPDIR at a directory that is." >&2; exit 2; }
 SANDBOX=${SANDBOX%/}
 [ "$KEEP" = 1 ] || trap 'rm -rf "$SANDBOX"' EXIT
 export INNKEEPER_BUS="$SANDBOX/bus"
@@ -41,12 +52,21 @@ mkdir -p "$INNKEEPER_BUS/comms" "$INNKEEPER_BUS/queues" "$SANDBOX/state" "$SANDB
 
 say()  { printf '\n\033[1m%s\033[0m\n' "$*"; }
 note() { printf '   %s\n' "$*"; }
-die()  { echo "FATAL: $*" >&2; exit 1; }
+# EVERY FATAL SAYS WHAT TO DO NEXT. Each step below works on an unmodified checkout, so a
+# failure is either a local edit (most often to party.yaml) or a bug; say both.
+die()  {
+  echo "FATAL: $*" >&2
+  echo "   What to do: this does not fail on an unmodified checkout. Run 'git status' for local" >&2
+  echo "   edits (party.yaml especially; unset INNKEEPER_PARTY if you set it), re-run with --keep" >&2
+  echo "   to inspect the sandbox, and if it still fails open an issue with this output:" >&2
+  echo "   https://github.com/dillondevoe/innkeeper/issues" >&2
+  exit 1
+}
 
 # Names come from the roster, positionally. Nothing here types a party member's name --
 # party.yaml promises nothing keys on those strings, and bin/ is scanned for address grammar.
-LANES=$(bash "$ACTOR" lanes) || die "actor.sh refused to name the lanes"
-[ -n "$LANES" ] || die "the roster names no lanes -- nobody can take this quest"
+LANES=$(bash "$ACTOR" lanes) || die "could not read the party roster at $INNKEEPER_PARTY"
+[ -n "$LANES" ] || die "the roster at $INNKEEPER_PARTY names no lanes -- nobody can take this quest"
 lane_of() { bash "$ACTOR" list lanes 2>/dev/null | grep -x -- "$1" >/dev/null && echo "$1"; }
 role_lane() { # role_lane <role> -> the lane whose ROLE field is this
   local b; for b in $LANES; do

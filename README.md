@@ -9,6 +9,25 @@ Everything is a file on disk, so you can `ls` the run while it happens, and a wo
 mid-job loses nothing: the next one picks the job up from the file. Spend is capped before a call
 starts, not after.
 
+## First ten minutes
+
+On Linux or macOS, with `bash`, `git` and `python3` installed (details under
+[Requirements](#requirements)). Nothing here calls a model, uses the network or spends money.
+
+| Run this | Takes | The last lines you should see |
+|---|---|---|
+| `git clone https://github.com/dillondevoe/innkeeper && cd innkeeper` | seconds | git's own clone output |
+| `bin/hello-party.sh` | ~1 s | `Nothing else on your machine was touched.` then `(sandbox removed; --keep to inspect it)` |
+| `bin/smoke.sh` | ~1 s | `smoke complete.` then `(sandbox removed; --keep to inspect it)` |
+| `bin/murder-quest.sh` | ~7 s | `murder-quest complete.`, two lines about the two kills, then `(sandbox removed; ...)` |
+| `bash tests/run-all.sh` | ~2 min | `suite: 21/21 batteries green (expected 21), red=0 cannot-run=0`, exit 0 |
+
+Without `gitleaks` installed, the last line is instead
+`suite: 20/21 batteries green (expected 21), red=0 cannot-run=1` and the exit code is 1; that is
+expected, and the line above it names the missing scanner (see "Run them all" below). Each demo
+exits 0 on success and non-zero otherwise, takes `--keep` (keep the sandbox) or `--help`, and
+refuses any other argument with a usage line. A failure says what went wrong and what to do next.
+
 ## You can watch one finish without installing anything
 
 No clone, no terminal, no login:
@@ -50,7 +69,8 @@ in-memory messages. For a quick task in one sitting, one session is simpler.
 
 - **The demos and the test suite cost nothing.** `bin/hello-party.sh`, `bin/murder-quest.sh`
   and `tests/run-all.sh` never call a model or the network.
-- **A live run is refused unless you opt in** (`INNKEEPER_LIVE=1` plus a ledger file), and it
+- **A live run is refused unless you opt in** (`INNKEEPER_LIVE=1`; `bin/live-party.sh` keeps
+  its own spend ledger in its sandbox, and no model call is made without one), and it
   stops starting new model calls at a ceiling: `INNKEEPER_LIVE_MAX_USD`, default `$3.00`.
 - **The one recorded live run cost $0.9569 over 2 model calls.** One run is a sample, not a
   price list; your quest, model and turn limit change it.
@@ -116,9 +136,12 @@ WIRING proof, and it stays because every hop in it is the real script (the roste
 delivery from `staff/inbound.sh`), so when it breaks, something real broke.
 
 Record shapes are in [SCHEMA.md](SCHEMA.md). Every script here is paired with a battery
-under `tests/`. Run them all, and get one verdict with an exit code:
+under `tests/`. Run them all, and get one verdict with an exit code (about two minutes):
 
     bash tests/run-all.sh
+
+The last line is the verdict; on a machine with every requirement installed it reads
+`suite: 21/21 batteries green (expected 21), red=0 cannot-run=0`.
 
 It prints GREEN / RED / CANNOT-RUN per battery, shows the failing arms inline, and fails if
 the number of batteries is not the number it expects — a suite that finds its own members by
@@ -152,7 +175,8 @@ a machine that has the BSD tools, which the author's machine is not.
 bin/murder-quest.sh
 ```
 
-Two workers are really `kill -9`'d mid-quest — one before it commits its work, one *after*
+It takes about seven seconds: most of that is two deliberate three-second waits for a dead
+worker's lease to go stale. Two workers are really `kill -9`'d mid-quest — one before it commits its work, one *after*
 committing but before it could tell anyone. Both quests land exactly once: the first is redone
 by whoever takes over, and the second is not redone at all, because the finished result is
 already there and the takeover is told so. The script asserts all of that and exits non-zero if
@@ -181,9 +205,15 @@ with whatever login or environment you already have.
 
 ## Requirements
 
-`bash`, `git`, `python3`, `jq`, `gitleaks` (the port-gate battery reports CANNOT-RUN without it,
-and a CANNOT-RUN fails the suite), `tmux` (real runs of `lifecycle/recycle.sh`; the tests stub
-it), and the `claude` CLI (live runs only; the demos and tests never call it). Install `claude`
-yourself; do not vendor or redistribute it.
+- **The demos** (`bin/hello-party.sh`, `bin/smoke.sh`, `bin/murder-quest.sh`): `bash` (3.2 or
+  later, so macOS's stock bash works), `git`, and the standard POSIX tools (`awk`, `sed`,
+  `mktemp`, ...). They also run without `python3`.
+- **The test suite** (`tests/run-all.sh`): the above plus `python3` and
+  [gitleaks](https://github.com/gitleaks/gitleaks) (the port-gate battery reports CANNOT-RUN
+  without it, and a CANNOT-RUN fails the suite). `tmux` is not needed: the tests stub it.
+- **Live runs** (`bin/live-party.sh`): the above plus the `claude` CLI and `python3`
+  (`bin/live-cost.sh` totals the ledger with it); `jq` is optional and is used to read each
+  call's cost when present. Install `claude` yourself; do not vendor or redistribute it.
+- `tmux` only for real runs of `lifecycle/recycle.sh`.
 
 MIT. See [LICENSE](LICENSE).

@@ -17,7 +17,7 @@ trap 'rm -rf "$TMP"' EXIT
 PASS=0; FAIL=0; ARMS=0
 ok()  { ARMS=$((ARMS+1)); PASS=$((PASS+1)); printf '  %s — PASS\n' "$1"; }
 bad() { ARMS=$((ARMS+1)); FAIL=$((FAIL+1)); printf '  %s — FAIL :: %s\n' "$1" "$2"; }
-EXPECT_ARMS=18
+EXPECT_ARMS=19
 
 # --- the stub CLI -----------------------------------------------------------------------
 # $STUB_MODE picks the behaviour; $STUB_CALLS records that it ran at all.
@@ -123,6 +123,11 @@ printf '2026-01-01T00:00:00Z\tworker\t0.03\nnonsense\n' > "$TMP/c7.tsv"
 OUT=$(bash "$REPO/bin/live-cost.sh" "$TMP/c7.tsv" 2>&1); RC=$?
 if [ "$RC" -ne 0 ] && grep -q 'REFUSING' <<<"$OUT"; then ok "C7-a-malformed-ledger-line-is-refused-not-skipped"
 else bad "C7-a-malformed-ledger-line-is-refused-not-skipped" "rc=$RC out=[$OUT]"; fi
+
+# --- C7b: no ledger given is a usage error that says where a ledger comes from -----------
+OUT=$(bash "$REPO/bin/live-cost.sh" 2>&1); RC=$?
+if [ "$RC" = 2 ] && grep -q '^usage: bin/live-cost.sh <ledger.tsv>.*live-party' <<<"$OUT"; then ok "C7b-no-ledger-argument-is-plain-usage"
+else bad "C7b-no-ledger-argument-is-plain-usage" "rc=$RC out=[$OUT]"; fi
 
 # --- C8: a CLI that fails is not a commit ------------------------------------------------
 T="$TMP/c8"; mktoy "$T"; H=$(git -C "$T" rev-parse HEAD)

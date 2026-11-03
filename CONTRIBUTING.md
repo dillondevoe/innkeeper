@@ -12,7 +12,9 @@ Do not add attribution trailers that are not true.
 
 ## Tests
 
-Run the whole suite and read the one-line verdict:
+Before changing anything, walk the README's "First ten minutes" table on your machine; each
+command there names the line it should end on. Then run the whole suite and read the one-line
+verdict (about two minutes):
 
     bash tests/run-all.sh
 

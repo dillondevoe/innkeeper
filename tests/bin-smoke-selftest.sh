@@ -12,7 +12,7 @@ R=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 # refused to name the lanes" and every arm reds out identically, which is indistinguishable
 # from the mutation being caught. Symlink a tree; do not copy the file somewhere flat.
 IMPL="${HELLO_IMPL:-$R/bin/smoke.sh}"
-EXPECT_ARMS=14
+EXPECT_ARMS=17
 n=0; pass=0
 ok(){ n=$((n+1)); pass=$((pass+1)); }
 bad(){ n=$((n+1)); echo "FAIL $1"; }
@@ -70,6 +70,16 @@ chk H13-default-run-keeps-nothing "$sb" ""
 bash "$IMPL" --keep >"$W/out2" 2>/dev/null
 kept=$(sed -n 's/.*sandbox kept at //p' "$W/out2")
 if [ -n "$kept" ] && [ -d "$kept" ]; then ok; rm -rf "$kept"; else bad "H14-keep-leaves-the-sandbox"; fi
+
+# --- arguments: an unknown one is REFUSED (rc 2, usage on stderr), not silently ignored ----
+# `--kep` used to run the whole demo and then delete the sandbox the caller asked to keep.
+bash "$IMPL" --kep >"$W/uo" 2>"$W/ue"; urc=$?
+chk U1-unknown-arg-rc2 "$urc:$(command grep -c 'unrecognised argument' "$W/ue")" "2:1"
+bash "$IMPL" --help >"$W/ho" 2>/dev/null; hrc=$?
+chk U2-help-rc0-prints-usage "$hrc:$(command grep -c '^usage: bin/smoke.sh \[--keep\]' "$W/ho")" "0:1"
+# --- a broken roster says what to do next, not only what broke ---------------------------
+INNKEEPER_PARTY="$W/no-such-party.yaml" bash "$IMPL" >/dev/null 2>"$W/fe"; frc=$?
+chk U3-fatal-says-what-to-do "$frc:$(command grep -c 'What to do' "$W/fe")" "2:1"
 
 echo "bin-smoke-selftest: $pass/$n passed (expected $EXPECT_ARMS arms)"
 [ "$n" = "$EXPECT_ARMS" ] || { echo "ARM COUNT DRIFT: ran $n, expected $EXPECT_ARMS"; exit 1; }

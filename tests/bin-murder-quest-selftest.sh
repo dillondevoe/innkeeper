@@ -9,7 +9,7 @@
 set -uo pipefail
 R=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 IMPL="${MURDER_IMPL:-$R/bin/murder-quest.sh}"
-EXPECT_ARMS=12
+EXPECT_ARMS=14
 n=0; pass=0
 ok(){ n=$((n+1)); pass=$((pass+1)); }
 bad(){ n=$((n+1)); echo "FAIL $1"; }
@@ -84,6 +84,13 @@ chk D1-ln-force-caught "$(mut D1 's/if ln "\$src" "\$d" 2>\/dev\/null; then/if l
 # so this mutation is one the demo can actually see. (The empty guard is merge.sh's own property
 # and is armed there, by M8; demo-level coverage should not be claimed for what the demo never runs.)
 chk D2-already-merged-must-not-claim-merged "$(mut D2 's/echo "ALREADY-MERGED \$d by=\${by:-unknown}"/echo "MERGED $d"/')" D2=PASS
+
+# --- arguments: an unknown one is REFUSED (rc 2, usage on stderr), not silently ignored ----
+# `--kep` used to run the whole demo and then delete the sandbox the caller asked to keep.
+bash "$IMPL" --kep >"$W/uo" 2>"$W/ue"; urc=$?
+chk U1-unknown-arg-rc2 "$urc:$(command grep -c 'unrecognised argument' "$W/ue")" "2:1"
+bash "$IMPL" --help >"$W/ho" 2>/dev/null; hrc=$?
+chk U2-help-rc0-prints-usage "$hrc:$(command grep -c '^usage: bin/murder-quest.sh \[--keep\]' "$W/ho")" "0:1"
 
 echo "bin-murder-quest-selftest: $pass/$n passed (expected $EXPECT_ARMS arms)"
 [ "$pass" = "$EXPECT_ARMS" ] && [ "$n" = "$EXPECT_ARMS" ]

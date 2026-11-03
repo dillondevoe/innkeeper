@@ -22,7 +22,7 @@ HERE=$(cd "$(dirname "$0")" && pwd -P)
 REPO=$(cd "$HERE/.." && pwd -P)
 PRE="$REPO/bin/live-preflight.sh"
 
-EXPECT_ARMS=16
+EXPECT_ARMS=17
 fails=0; arms=0
 ok()  { arms=$((arms+1)); echo "  $1 — PASS"; }
 bad() { arms=$((arms+1)); fails=$((fails+1)); echo "  $1 — FAIL${2:+ :: $2}"; }
@@ -152,6 +152,9 @@ else bad "L8-the-unverifiable-condition-is-named-in-the-output" "out=[$OUT]"; fi
 OUT=$(env "${BASEOK[@]}" "$BASH_ABS" "$PRE" --what 2>&1); RC=$?
 if [ "$RC" = 2 ]; then ok "L9-unknown-flag-is-usage-rc2"
 else bad "L9-unknown-flag-is-usage-rc2" "rc=$RC"; fi
+# L9b: and it says WHAT was wrong, not just a dump of the header.
+if printf '%s' "$OUT" | grep -q 'unrecognised argument: --what'; then ok "L9b-usage-names-the-bad-argument"
+else bad "L9b-usage-names-the-bad-argument" "out=[$OUT]"; fi
 
 # --- L10: a refusal says nothing was spent ---------------------------------------------------
 run INNKEEPER_LIVE= "INNKEEPER_CLAUDE=$STUB"

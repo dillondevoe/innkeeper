@@ -13,7 +13,7 @@ OUT_DIR="$REPO/replay"
 OUT="$OUT_DIR/index.html"
 
 [ -f "$FIXTURE" ] || { echo "FATAL: $FIXTURE missing — run bin/record-quest.sh first" >&2; exit 2; }
-command -v python3 >/dev/null 2>&1 || { echo "FATAL: python3 is required" >&2; exit 2; }
+command -v python3 >/dev/null 2>&1 || { echo "FATAL: python3 is required to render the replay page. Install python3, then re-run." >&2; exit 2; }
 mkdir -p "$OUT_DIR"
 
 python3 - "$FIXTURE" "$OUT" <<'PY'
