@@ -42,8 +42,10 @@ That GIF, and the `replay/index.html` page it's a recording of, are both built f
 mockup. `bin/record-quest.sh` makes the fixture, `bin/render-replay.sh` makes the page;
 `tests/bin-record-quest-selftest.sh` fails the suite if either one drifts from a fresh run. The
 page is one self-contained file (no network requests) with play/pause, step, scrub and a legend
-of the four roles; the GIF is a screen capture of that page, taken by hand and not checked by
-the suite.
+of the four roles. With scripts off it shows the whole transcript at once instead of the player.
+The suite also measures the page's colours against WCAG AA contrast (4.5:1 for text, 3:1 for
+borders and other marks). The GIF is a screen capture of that page, taken by hand and not checked
+by the suite.
 
 **Status: alpha. Working prototype, not a product.** Innkeeper is an independent project, not
 affiliated with or endorsed by Anthropic. "Claude" and "Claude Code" are trademarks of Anthropic;
