@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # record-quest.sh — run bin/hello-party.sh once and capture it as a timed fixture.
 #
-# The fixture is what bin/replay.sh and the web replay (replay/index.html) play back. It is
+# The fixture is what the web replay (replay/index.html, built by bin/render-replay.sh) plays back. It is
 # the quest's own stdout, nothing invented: a line and the elapsed seconds since the quest
 # started, one pair per line, in order. No model is called and nothing is read from the
 # quest except what it already prints — the same text a stranger sees running it live.
