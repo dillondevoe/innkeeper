@@ -127,11 +127,11 @@ chk "E10 retract    resolved marker withdrawn" "$(markers)" ""
 # E11 storm damper, with its control. Four NOW wakes from one sender to one lane, then a
 # fifth: demoted. The control is the same fifth comm at P1, which is never damped.
 new_bus; mkdir -p "$STATE/gate/recent"; n=$(date +%s)
-for i in 1 2 3 4; do echo $((n - 60)) >> "$STATE/gate/recent/worker"; done
+for _ in 1 2 3 4; do echo $((n - 60)) >> "$STATE/gate/recent/worker"; done
 comm "worker-to-gate-P2-chatter-2026-09-20.md" "priority: P2" "re: chatter"
 run; chk "E11 storm      fifth P2 demoted" "$(markers)/$(penned)" "/1"
 new_bus; mkdir -p "$STATE/gate/recent"; n=$(date +%s)
-for i in 1 2 3 4; do echo $((n - 60)) >> "$STATE/gate/recent/worker"; done
+for _ in 1 2 3 4; do echo $((n - 60)) >> "$STATE/gate/recent/worker"; done
 comm "worker-to-gate-P1-chatter-2026-09-20.md" "priority: P1" "re: chatter"
 run; chk "E11 control    P1 is never damped" "$(markers)" "gate"
 

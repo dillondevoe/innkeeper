@@ -219,7 +219,7 @@ case "${1:-}" in
       d=$(_blocked "$2" | command grep -vx "$3" || true)
     fi
     _rewrite "$2" "deps=$(printf '%s\n' "$d" | sed '/^$/d' | paste -sd, -)"
-    echo "$(echo "$1" | tr a-z A-Z) $2 $3";;
+    echo "$(echo "$1" | tr '[:lower:]' '[:upper:]') $2 $3";;
 
   *) usage;;
 esac

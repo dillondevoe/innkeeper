@@ -77,7 +77,7 @@ role_lane() { local b; for b in $LANES; do
   done; return 1; }
 W=$(role_lane worker)     || die "the roster has no worker -- nobody can do the work"
 G=$(role_lane gate)       || die "the roster has no gate -- nothing would be checked"
-R=$(role_lane researcher) || die "the roster has no researcher"
+role_lane researcher >/dev/null || die "the roster has no researcher"
 
 say "1. A tool that needs a version flag"
 TOY="$SANDBOX/work"; mkdir -p "$TOY"

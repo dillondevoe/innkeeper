@@ -89,7 +89,7 @@ wake_class() {  # $1 = comm path -> NOW | BATCH | LOW
   case "$pri" in P0|P1) echo NOW; return;; esac
   case "$re" in
     *gate*|*ruling*|*directive*|*decision*|*blocked*|*urgent*) echo NOW; return;;
-    ack*|acked*|received*|fyi*|verified*|"no action"*|"nothing owed"*|"no-op"*|"no objection"*) echo LOW; return;;
+    ack*|received*|fyi*|verified*|"no action"*|"nothing owed"*|"no-op"*|"no objection"*) echo LOW; return;;
   esac
   case "$pri" in P3) echo BATCH; return;; esac
   echo NOW

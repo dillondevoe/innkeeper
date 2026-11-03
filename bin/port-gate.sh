@@ -42,7 +42,7 @@ ADDR_DIRS='^(bus|lifecycle|bin|staff|roles|fixtures)/'
 
 usage() { echo "usage: port-gate.sh --source SRC | --no-source  DEST..." >&2; exit 2; }
 
-SRC= NOSRC=
+SRC=
 case "${1:-}" in
   # An empty SRC would skip the wall below (it is guarded by `[ -n "$SRC" ]`), so `--source ""`
   # or a bare `--source` is the omitted-source case in disguise and is refused the same way.
@@ -51,7 +51,7 @@ case "${1:-}" in
       echo "CANNOT-ASSESS - --source was given an empty path; name the file this came from, or pass --no-source for a file authored in place"; exit 2
     fi
     SRC=$2; shift 2 ;;
-  --no-source) NOSRC=1; shift ;;
+  --no-source) shift ;;   # SRC stays empty: there is no source path to hold against the wall
   -*|'') usage ;;
   *) echo "CANNOT-ASSESS - no --source given; pass --source SRC, or --no-source for a file authored in place"; exit 2 ;;
 esac
@@ -123,7 +123,6 @@ judge() {
       re="(-to-|-cc-|start-|recycle-|queues/)($re)([-/.]|$)|(^|[^A-Za-z0-9])($re)-to-"
       cls=address-name
     fi
-    local ln
     local out grc
     out=$(LC_ALL=C command grep -aEin -m1 -- "$re" "$abs"); grc=$?
     if [ $grc = 0 ]; then echo "FORBIDDEN $cls $rel:${out%%:*}"; hit=1

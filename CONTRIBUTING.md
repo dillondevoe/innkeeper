@@ -31,6 +31,10 @@ portability defect, not noise.
 produce failures neither produces alone (see the README). Likewise run a single battery
 directly with `bash tests/<name>-selftest.sh`, not several at once.
 
+`shellcheck -S warning bin/*.sh bus/*.sh roles/*.sh lifecycle/*.sh staff/*.sh tests/*.sh` is
+clean; `.shellcheckrc` lists each check disabled repo-wide with its reason. shellcheck is not a
+suite dependency, so no battery runs it.
+
 Every script is paired with a battery under `tests/`; add or extend one with your change. The
 batteries make no model call and spend nothing; keep it that way.
 
