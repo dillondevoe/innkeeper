@@ -30,7 +30,7 @@
 # STATED LIMIT: `ln` is a hard link, so the staged file and the destination must share a
 # filesystem. Both live under $INNKEEPER_HOME by construction. If that ever stops being true the
 # commit does not silently degrade — `ln` fails, the destination does not exist, and this script
-# exits 2 rather than reporting a merge it did not perform.
+# exits 1 rather than reporting a merge it did not perform (arm M15b pins the rc).
 set -uo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd -P)

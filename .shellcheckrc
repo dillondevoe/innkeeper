@@ -1,0 +1,6 @@
+# Bar: `shellcheck -S warning` over bin/ bus/ roles/ lifecycle/ staff/ tests/ is clean. One reason per disable.
+source-path=SCRIPTDIR
+# SC1010: `quest.sh state <id> done` passes the quest state "done" as an argument, not the keyword.
+disable=SC1010
+# SC1007: `VAR= cmd` deliberately runs cmd with VAR set-but-empty, a world the batteries test.
+disable=SC1007

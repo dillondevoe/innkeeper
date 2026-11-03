@@ -20,6 +20,7 @@ arm() {  # arm <name> <want-rc|-> <got-rc> [<pattern> <text>]
   n=$((n+1)); local name="$1" wrc="$2" grc="$3" ok=1
   if [ "$wrc" != "-" ] && [ "$wrc" != "$grc" ]; then ok=0; local why="rc=$grc want $wrc"; fi
   if [ "$#" -ge 5 ]; then
+    # shellcheck disable=SC2254 # $4 IS a glob pattern by contract; quoting it would match literally
     case "$5" in $4) ;; *) ok=0; why="got [$5] want $4" ;; esac
   fi
   if [ "$ok" = 1 ]; then pass=$((pass+1)); else echo "FAIL $name: ${why}"; fi

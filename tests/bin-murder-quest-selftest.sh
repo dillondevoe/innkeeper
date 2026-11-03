@@ -56,7 +56,7 @@ mut(){ # name, sed-program
   # control could not see it because D0 pointed at the in-repo path and so did not share
   # the mutants' construction. A control that does not travel the mutant's path is not a
   # control. (Caught by review, 2026-09-20, before this ever shipped.)
-  local f; f=$(mktemp "$R/bus/.mut-XXXXXX.sh")
+  local f; f=$(mktemp "$R/bus/.mut-XXXXXX")
   cp "$R/bus/merge.sh" "$f"
   # GNU `sed -i PROG f` and BSD `sed -i SUFFIX PROG f` are DIFFERENT COMMANDS sharing a
   # spelling. On macOS the program is eaten as a backup suffix, the edit never lands, and
@@ -71,7 +71,7 @@ mut(){ # name, sed-program
 # D0 — the control. The UNMUTATED merge.sh, injected through the same override, must stay green.
 # Without it every mutation arm passes on a demo that fails whenever INNKEEPER_MERGE is set at
 # all, which would catch the override and nothing else.
-chk D0-override-control "$(f=$(mktemp "$R/bus/.mut-XXXXXX.sh"); cp "$R/bus/merge.sh" "$f"; INNKEEPER_MERGE=$f bash "$IMPL" >/dev/null 2>&1 && echo GREEN || echo RED; rm -f "$f")" GREEN
+chk D0-override-control "$(f=$(mktemp "$R/bus/.mut-XXXXXX"); cp "$R/bus/merge.sh" "$f"; INNKEEPER_MERGE=$f bash "$IMPL" >/dev/null 2>&1 && echo GREEN || echo RED; rm -f "$f")" GREEN
 # D1 — last-writer-wins. `ln -f` always succeeds, so the takeover in act 2 silently overwrites
 # the dead worker's finished result. This is the exact defect the slice exists to rule out.
 chk D1-ln-force-caught "$(mut D1 's/if ln "\$src" "\$d" 2>\/dev\/null; then/if ln -f "$src" "$d" 2>\/dev\/null; then/')" D1=PASS
